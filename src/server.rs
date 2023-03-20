@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-use axum::{routing::get, Router};
+use axum::{extract::Query, response::IntoResponse, routing::get, Router};
 use log::info;
+use serde::Deserialize;
 
 pub async fn launch(address: &std::net::SocketAddr) -> Result<()> {
     let server = axum::Server::try_bind(address)
@@ -12,5 +13,16 @@ pub async fn launch(address: &std::net::SocketAddr) -> Result<()> {
 }
 
 fn router() -> Router {
-    Router::new().route("/", get(|| async { "Hello, world!" }))
+    Router::new().route("/game", get(game_get))
+}
+
+#[derive(Debug, Deserialize)]
+struct GameParams {
+    event: String,
+    file: String,
+}
+
+async fn game_get(Query(params): Query<GameParams>) -> impl IntoResponse {
+    info!("GET /game {params:?} -> 200");
+    format!("Hello, /game event={} file={}", params.event, params.file)
 }
