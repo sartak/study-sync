@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 axum = "0.6.11"
+clap = { version = "4.1.11", features = ["derive"] }
 notify = { version = "5.1.0", default-features = false, features = ["serde"] }
 reqwest = { version = "0.11.14", features = ["multipart", "json", "serde_json"], default-features = false }
 tokio = { version = "1.26.0", features = ["full"] }
