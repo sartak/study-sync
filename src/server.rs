@@ -1,7 +1,9 @@
+use crate::event::Event;
 use anyhow::{Context, Result};
 use axum::{extract::Query, http::StatusCode, response::IntoResponse, routing::get, Router};
 use log::info;
 use serde::Deserialize;
+use std::path::PathBuf;
 
 pub async fn launch(address: &std::net::SocketAddr) -> Result<()> {
     let server = axum::Server::try_bind(address)
@@ -19,13 +21,13 @@ fn router() -> Router {
 #[derive(Debug, Deserialize)]
 struct GameParams {
     event: String,
-    file: String,
+    file: PathBuf,
 }
 
 async fn game_get(Query(params): Query<GameParams>) -> impl IntoResponse {
     let event = match params.event.as_str() {
-        "start" => (),
-        "end" => (),
+        "start" => Event::GameStarted(params.file),
+        "end" => Event::GameEnded(params.file),
         _ => {
             info!(
                 "GET /game {params:?} -> 400 (invalid event: {})",
@@ -38,6 +40,6 @@ async fn game_get(Query(params): Query<GameParams>) -> impl IntoResponse {
                 .into_response();
         }
     };
-    info!("GET /game {params:?} -> 200");
-    format!("Hello, /game event={} file={}", params.event, params.file).into_response()
+    info!("GET /game ({event:?}) -> 204");
+    StatusCode::NO_CONTENT.into_response()
 }
