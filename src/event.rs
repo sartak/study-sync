@@ -6,4 +6,5 @@ pub enum Event {
     GameEnded(PathBuf),
     ScreenshotCreated(PathBuf),
     SaveFileCreated(PathBuf),
+    StartShutdown,
 }

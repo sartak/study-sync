@@ -21,7 +21,10 @@ pub async fn launch(
 }
 
 fn router(tx: mpsc::UnboundedSender<Event>) -> Router {
-    Router::new().route("/game", get(game_get)).with_state(tx)
+    Router::new()
+        .route("/game", get(game_get))
+        .route("/shutdown", get(shutdown_get))
+        .with_state(tx)
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,5 +60,18 @@ async fn game_get(
     }
 
     info!("GET /game -> 204");
+    StatusCode::NO_CONTENT.into_response()
+}
+
+async fn shutdown_get(State(tx): State<mpsc::UnboundedSender<Event>>) -> impl IntoResponse {
+    if let Err(e) = tx.send(Event::StartShutdown) {
+        let e = anyhow!(e).context("failed to send event on channel");
+        error!("GET /shutdown -> 500 ({e:?})");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    // todo: block until shutdown completed
+
+    info!("GET /shutdown -> 204");
     StatusCode::NO_CONTENT.into_response()
 }

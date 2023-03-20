@@ -3,6 +3,7 @@ Description=study-sync
 
 [Service]
 ExecStart=/usr/local/bin/study-sync-wrapper.sh
+ExecStop=curl -sS http://127.0.0.1:4000/shutdown
 UMask=0000
 StandardError=append:/var/log/study-sync.log
 
