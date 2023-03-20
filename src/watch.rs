@@ -23,7 +23,7 @@ where
     let (mut watcher, mut rx) = async_watcher()?;
 
     watcher
-        .watch(path.as_ref(), RecursiveMode::Recursive)
+        .watch(path.as_ref(), RecursiveMode::NonRecursive)
         .with_context(|| format!("watching path {path}"))?;
     info!("Watching for changes to {path}");
 
