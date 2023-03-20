@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
 
     let (orchestrator, tx) = orchestrator::launch();
     let server = server::launch(&address);
-    let watch = watch::launch(args.path);
+    let watch = watch::launch(args.path, tx.clone());
     let handler = orchestrator.start();
 
     select! {

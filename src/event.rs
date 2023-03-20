@@ -4,4 +4,6 @@ use std::path::PathBuf;
 pub enum Event {
     GameStarted(PathBuf),
     GameEnded(PathBuf),
+    FileSaved(PathBuf),
+    FileRemoved(PathBuf),
 }
