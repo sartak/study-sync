@@ -6,12 +6,17 @@ use futures::{
 };
 use log::{debug, info};
 use notify::{
-    event::{AccessKind, AccessMode, RemoveKind},
+    event::{AccessKind, AccessMode},
     Config, Event as NotifyEvent, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
 };
 use tokio::sync::mpsc;
 
-pub async fn launch<P>(path: P, tx: mpsc::UnboundedSender<Event>) -> Result<()>
+pub enum WatchTarget {
+    Screenshots,
+    SaveFiles,
+}
+
+pub async fn launch<P>(path: P, target: WatchTarget, tx: mpsc::UnboundedSender<Event>) -> Result<()>
 where
     P: AsRef<std::path::Path> + std::fmt::Display,
 {
@@ -36,9 +41,10 @@ where
 
                 let event = match event.kind {
                     // create file in directory
-                    EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
-                        Event::FileSaved(path)
-                    }
+                    EventKind::Access(AccessKind::Close(AccessMode::Write)) => match target {
+                        WatchTarget::Screenshots => Event::ScreenshotCreated(path),
+                        WatchTarget::SaveFiles => Event::SaveFileCreated(path),
+                    },
 
                     // create file outside directory, move it in
                     // EventKind::Create(CreateKind::File) => Event::FileSaved(path),
@@ -47,8 +53,7 @@ where
                     // EventKind::Modify(ModifyKind::Name(RenameMode::To)) => Event::FileSaved(path),
 
                     // rm file
-                    EventKind::Remove(RemoveKind::File) => Event::FileRemoved(path),
-
+                    // EventKind::Remove(RemoveKind::File) => Event::FileRemoved(path),
                     _ => continue,
                 };
 
