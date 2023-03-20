@@ -1,0 +1,10 @@
+[Unit]
+Description=study-sync
+
+[Service]
+ExecStart=/usr/local/bin/study-sync-wrapper.sh
+UMask=0000
+StandardError=append:/var/log/study-sync.log
+
+[Install]
+WantedBy=multi-user.target
