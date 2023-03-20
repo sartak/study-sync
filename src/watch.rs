@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures::{
     channel::mpsc::{channel, Receiver},
     SinkExt, StreamExt,
@@ -12,7 +12,9 @@ where
 {
     let (mut watcher, mut rx) = async_watcher()?;
 
-    watcher.watch(path.as_ref(), RecursiveMode::Recursive)?;
+    watcher
+        .watch(path.as_ref(), RecursiveMode::Recursive)
+        .with_context(|| format!("watching path {path}"))?;
     info!("Watching for changes to {path}");
 
     while let Some(res) = rx.next().await {

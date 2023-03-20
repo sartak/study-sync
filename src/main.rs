@@ -3,7 +3,6 @@ mod watch;
 
 use anyhow::Result;
 use clap::Parser;
-use log::error;
 use tokio::select;
 
 #[derive(Parser, Debug)]
@@ -31,17 +30,7 @@ async fn main() -> Result<()> {
     let watch = watch::launch(args.path);
 
     select! {
-        res = server => {
-            if let Err(e) = res {
-                error!("Error in server: {}", e)
-            }
-        }
-        res = watch => {
-            if let Err(e) = res {
-                error!("Error in watcher: {}", e)
-            }
-        }
+        res = server => { res }
+        res = watch => { res }
     }
-
-    Ok(())
 }
