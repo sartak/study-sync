@@ -16,16 +16,22 @@ pub enum WatchTarget {
     SaveFiles,
 }
 
-pub async fn launch<P>(path: P, target: WatchTarget, tx: mpsc::UnboundedSender<Event>) -> Result<()>
+pub async fn launch<P>(
+    paths: Vec<P>,
+    target: WatchTarget,
+    tx: mpsc::UnboundedSender<Event>,
+) -> Result<()>
 where
-    P: AsRef<std::path::Path> + std::fmt::Display,
+    P: AsRef<std::path::Path> + std::fmt::Debug,
 {
     let (mut watcher, mut rx) = async_watcher()?;
 
-    watcher
-        .watch(path.as_ref(), RecursiveMode::NonRecursive)
-        .with_context(|| format!("watching path {path}"))?;
-    info!("Watching for changes to {path}");
+    for path in &paths {
+        watcher
+            .watch(path.as_ref(), RecursiveMode::NonRecursive)
+            .with_context(|| format!("watching path {path:?}"))?;
+    }
+    info!("Watching for changes to {paths:?}");
 
     while let Some(res) = rx.next().await {
         match res {

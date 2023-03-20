@@ -14,7 +14,7 @@ struct Args {
     address: String,
 
     #[arg(long)]
-    screenshots_directory: String,
+    watch_screenshots: Vec<std::path::PathBuf>,
 
     #[clap(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
     let (orchestrator, tx) = orchestrator::launch();
     let server = server::launch(&address, tx.clone());
     let screenshots = watch::launch(
-        args.screenshots_directory,
+        args.watch_screenshots,
         watch::WatchTarget::Screenshots,
         tx.clone(),
     );
