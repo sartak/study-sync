@@ -1,4 +1,5 @@
 mod event;
+mod game;
 mod orchestrator;
 mod server;
 mod watch;
