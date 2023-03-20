@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
     current_game: Option<Game>,
+    previous_game: Option<Game>,
 }
 
 pub fn launch() -> (Orchestrator, mpsc::UnboundedSender<Event>) {
@@ -15,6 +16,7 @@ pub fn launch() -> (Orchestrator, mpsc::UnboundedSender<Event>) {
         Orchestrator {
             rx,
             current_game: None,
+            previous_game: None,
         },
         tx,
     );
@@ -30,7 +32,7 @@ impl Orchestrator {
                         error!("Already have a current game! {previous_game:?}");
                     }
 
-                    self.current_game = Some(Game { path });
+                    self.set_current_game(Some(Game { path }));
                 }
                 Event::GameEnded(path) => {
                     if let Some(previous_game) = &self.current_game {
@@ -41,7 +43,7 @@ impl Orchestrator {
                         error!("No previous game!");
                     }
 
-                    self.current_game = None;
+                    self.set_current_game(None);
                 }
                 Event::ScreenshotCreated(path) => {}
                 Event::SaveFileCreated(path) => {}
@@ -49,5 +51,17 @@ impl Orchestrator {
             }
         }
         Ok(())
+    }
+
+    fn game(&self) -> Option<&Game> {
+        self.current_game.as_ref().or(self.previous_game.as_ref())
+    }
+
+    fn set_current_game(&mut self, game: Option<Game>) {
+        let current = self.current_game.take();
+        if current.is_some() {
+            self.previous_game = current;
+        }
+        self.current_game = game;
     }
 }
