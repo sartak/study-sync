@@ -1,29 +1,42 @@
 use crate::event::Event;
 use crate::game::Game;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use log::{error, info};
+use std::path::PathBuf;
 use tokio::sync::mpsc;
 
 pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
+    hold_screenshots: PathBuf,
     current_game: Option<Game>,
     previous_game: Option<Game>,
 }
 
-pub fn launch() -> (Orchestrator, mpsc::UnboundedSender<Event>) {
+pub fn launch(hold_screenshots: PathBuf) -> Result<(Orchestrator, mpsc::UnboundedSender<Event>)> {
     let (tx, rx) = mpsc::unbounded_channel();
-    return (
+
+    if !hold_screenshots.is_dir() {
+        return Err(anyhow!(
+            "hold-screenshots {hold_screenshots:?} not a directory"
+        ));
+    }
+
+    return Ok((
         Orchestrator {
             rx,
+            hold_screenshots,
             current_game: None,
             previous_game: None,
         },
         tx,
-    );
+    ));
 }
 
 impl Orchestrator {
     pub async fn start(mut self) -> Result<()> {
+        let extra_directory = self.hold_screenshots.join("extra/");
+        let latest_screenshot = self.hold_screenshots.join("latest.png");
+
         while let Some(event) = self.rx.recv().await {
             info!("Handling {event:?}");
             match event {
@@ -50,7 +63,7 @@ impl Orchestrator {
                         Some(g) => g,
                         None => {
                             error!("Screenshot {path:?} created but no current game!");
-                            todo!("move screenshot into purgatory");
+                            todo!("move screenshot into {extra_directory:?}");
                         }
                     };
 

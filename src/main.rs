@@ -17,6 +17,9 @@ struct Args {
     #[clap(long, required = true, num_args = 1.., value_delimiter = ',')]
     watch_screenshots: Vec<PathBuf>,
 
+    #[arg(long)]
+    hold_screenshots: PathBuf,
+
     #[clap(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
 }
@@ -30,7 +33,7 @@ async fn main() -> Result<()> {
 
     let listen = args.listen.parse().unwrap();
 
-    let (orchestrator, tx) = orchestrator::launch();
+    let (orchestrator, tx) = orchestrator::launch(args.hold_screenshots)?;
     let server = server::launch(&listen, tx.clone());
     let screenshots = watch::launch(
         args.watch_screenshots,
