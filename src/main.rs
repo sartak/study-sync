@@ -11,6 +11,9 @@ struct Args {
     #[arg(long)]
     address: String,
 
+    #[arg(long)]
+    path: String,
+
     #[clap(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
 }
@@ -25,7 +28,7 @@ async fn main() -> Result<()> {
     let address = args.address.parse().unwrap();
 
     let server = server::launch(&address);
-    let watch = watch::launch("/home/shawn/tmp");
+    let watch = watch::launch(args.path);
 
     select! {
         res = server => {
