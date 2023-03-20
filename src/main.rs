@@ -1,4 +1,5 @@
 mod event;
+mod orchestrator;
 mod server;
 mod watch;
 
@@ -27,11 +28,14 @@ async fn main() -> Result<()> {
 
     let address = args.address.parse().unwrap();
 
+    let (orchestrator, tx) = orchestrator::launch();
     let server = server::launch(&address);
     let watch = watch::launch(args.path);
+    let handler = orchestrator.start();
 
     select! {
         res = server => { res }
         res = watch => { res }
+        res = handler => { res }
     }
 }
