@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     let address = args.address.parse().unwrap();
 
     let (orchestrator, tx) = orchestrator::launch();
-    let server = server::launch(&address);
+    let server = server::launch(&address, tx.clone());
     let watch = watch::launch(args.path, tx.clone());
     let handler = orchestrator.start();
 
