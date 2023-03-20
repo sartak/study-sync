@@ -45,7 +45,17 @@ impl Orchestrator {
 
                     self.set_current_game(None);
                 }
-                Event::ScreenshotCreated(path) => {}
+                Event::ScreenshotCreated(path) => {
+                    let game = match self.game() {
+                        Some(g) => g,
+                        None => {
+                            error!("Screenshot {path:?} created but no current game!");
+                            todo!("move screenshot into purgatory");
+                        }
+                    };
+
+                    info!("Got screenshot {path:?} for {game:?}");
+                }
                 Event::SaveFileCreated(path) => {}
                 Event::StartShutdown => {}
             }
