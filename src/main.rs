@@ -11,7 +11,7 @@ use tokio::select;
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(long)]
-    address: String,
+    listen: String,
 
     #[arg(long)]
     watch_screenshots: Vec<std::path::PathBuf>,
@@ -27,10 +27,10 @@ async fn main() -> Result<()> {
         .filter_level(args.verbose.log_level_filter())
         .init();
 
-    let address = args.address.parse().unwrap();
+    let listen = args.listen.parse().unwrap();
 
     let (orchestrator, tx) = orchestrator::launch();
-    let server = server::launch(&address, tx.clone());
+    let server = server::launch(&listen, tx.clone());
     let screenshots = watch::launch(
         args.watch_screenshots,
         watch::WatchTarget::Screenshots,
