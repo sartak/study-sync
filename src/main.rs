@@ -1,4 +1,6 @@
 mod server;
+mod watch;
+
 use anyhow::Result;
 use clap::Parser;
 
@@ -21,6 +23,8 @@ async fn main() -> Result<()> {
     let address = args.address.parse().unwrap();
 
     let server = server::launch(&address);
+    let w = watch::launch("/home/shawn/tmp");
+    w.await?;
     server.await?;
 
     Ok(())
