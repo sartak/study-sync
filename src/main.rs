@@ -3,6 +3,8 @@ mod watch;
 
 use anyhow::Result;
 use clap::Parser;
+use log::error;
+use tokio::select;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -23,9 +25,20 @@ async fn main() -> Result<()> {
     let address = args.address.parse().unwrap();
 
     let server = server::launch(&address);
-    let w = watch::launch("/home/shawn/tmp");
-    w.await?;
-    server.await?;
+    let watch = watch::launch("/home/shawn/tmp");
+
+    select! {
+        res = server => {
+            if let Err(e) = res {
+                error!("Error in server: {}", e)
+            }
+        }
+        res = watch => {
+            if let Err(e) = res {
+                error!("Error in watcher: {}", e)
+            }
+        }
+    }
 
     Ok(())
 }
