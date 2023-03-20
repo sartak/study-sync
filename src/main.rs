@@ -6,6 +6,7 @@ mod watch;
 
 use anyhow::Result;
 use clap::Parser;
+use std::path::PathBuf;
 use tokio::select;
 
 #[derive(Parser, Debug)]
@@ -13,8 +14,8 @@ struct Args {
     #[arg(long)]
     listen: String,
 
-    #[arg(long)]
-    watch_screenshots: Vec<std::path::PathBuf>,
+    #[clap(long, required = true, num_args = 1.., value_delimiter = ',')]
+    watch_screenshots: Vec<PathBuf>,
 
     #[clap(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
