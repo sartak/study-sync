@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
     hold_screenshots: PathBuf,
+    trim_game_prefix: Option<String>,
     database: Database,
     current_game: Option<Game>,
     previous_game: Option<Game>,
@@ -17,6 +18,7 @@ pub struct Orchestrator {
 pub fn launch(
     database: Database,
     hold_screenshots: PathBuf,
+    trim_game_prefix: Option<String>,
 ) -> Result<(Orchestrator, mpsc::UnboundedSender<Event>)> {
     let (tx, rx) = mpsc::unbounded_channel();
 
@@ -30,6 +32,7 @@ pub fn launch(
         Orchestrator {
             rx,
             hold_screenshots,
+            trim_game_prefix,
             database,
             current_game: None,
             previous_game: None,
@@ -50,6 +53,17 @@ impl Orchestrator {
                     if let Some(previous_game) = &self.current_game {
                         error!("Already have a current game! {previous_game:?}");
                     }
+
+                    let path = match self.trim_game_prefix {
+                        Some(ref prefix) => match path.strip_prefix(&prefix) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                error!("Could not trim prefix {prefix:?} from {path:?}: {e:?}");
+                                continue;
+                            }
+                        },
+                        None => &path,
+                    };
 
                     let game = match self.database.game_for_path(&path).await {
                         Ok(game) => game,

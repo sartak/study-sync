@@ -21,6 +21,9 @@ struct Args {
     #[arg(long)]
     games_database: PathBuf,
 
+    #[arg(long)]
+    trim_game_prefix: Option<String>,
+
     #[clap(long, required = true, num_args = 1.., value_delimiter = ',')]
     watch_screenshots: Vec<PathBuf>,
 
@@ -41,7 +44,8 @@ async fn main() -> Result<()> {
     let listen = args.listen.parse()?;
     let dbh = database::connect(args.plays_database, args.games_database).await?;
 
-    let (orchestrator, tx) = orchestrator::launch(dbh, args.hold_screenshots)?;
+    let (orchestrator, tx) =
+        orchestrator::launch(dbh, args.hold_screenshots, args.trim_game_prefix)?;
     let server = server::launch(&listen, tx.clone());
     let screenshots = watch::launch(
         args.watch_screenshots,
