@@ -1,5 +1,8 @@
+use crate::game::Game;
 use anyhow::Result;
 use log::info;
+use rusqlite::params;
+use std::path::PathBuf;
 use tokio::join;
 use tokio_rusqlite::Connection;
 
@@ -27,4 +30,29 @@ where
         plays_dbh,
         games_dbh,
     })
+}
+
+impl Database {
+    pub async fn game_for_path(self: &Self, path: &PathBuf) -> Result<Game> {
+        let path = path.clone();
+        self.games_dbh
+            .call(|conn| {
+                let mut stmt = conn.prepare_cached(
+                    "SELECT rowid, directory, language, label FROM games WHERE path = ?",
+                )?;
+
+                let path_param = path.clone();
+                let path_param = path_param.to_str();
+                Ok(stmt.query_row(params![path_param], |row| {
+                    Ok(Game {
+                        id: row.get(0)?,
+                        path,
+                        directory: row.get(1)?,
+                        language: row.get(2)?,
+                        label: row.get(3)?,
+                    })
+                })?)
+            })
+            .await
+    }
 }

@@ -51,7 +51,14 @@ impl Orchestrator {
                         error!("Already have a current game! {previous_game:?}");
                     }
 
-                    self.set_current_game(Some(Game { path }));
+                    let game = match self.database.game_for_path(&path).await {
+                        Ok(game) => game,
+                        Err(e) => {
+                            error!("Could not find game for path {path:?}: {e:?}");
+                            continue;
+                        }
+                    };
+                    self.set_current_game(Some(game));
                 }
                 Event::GameEnded(path) => {
                     if let Some(previous_game) = &self.current_game {
