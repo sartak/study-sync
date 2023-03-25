@@ -15,6 +15,7 @@ futures = "0.3.27"
 log = { version = "0.4.17", features = ["serde"] }
 notify = { version = "5.1.0", default-features = false, features = ["serde"] }
 reqwest = { version = "0.11.14", features = ["multipart", "json", "serde_json"], default-features = false }
+rusqlite = "0.28.0"
 serde = "1.0.158"
 tokio = { version = "1.26.0", features = ["full"] }
 tokio-rusqlite = "0.3.0"

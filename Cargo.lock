@@ -1061,6 +1061,7 @@ dependencies = [
  "log",
  "notify",
  "reqwest",
+ "rusqlite",
  "serde",
  "tokio",
  "tokio-rusqlite",
