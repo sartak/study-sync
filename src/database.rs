@@ -102,4 +102,16 @@ impl Database {
             })
             .await
     }
+
+    pub async fn save_currently_playing(self: &Self, id: Option<i64>) -> Result<()> {
+        self.plays_dbh
+            .call(move |conn| {
+                conn.execute("DELETE FROM current", params![])?;
+                if let Some(id) = id {
+                    conn.execute("INSERT INTO current (play) VALUES (?)", params![id])?;
+                }
+                Ok(())
+            })
+            .await
+    }
 }
