@@ -1,0 +1,10 @@
+CREATE TABLE
+  IF NOT EXISTS plays (
+    game INTEGER NOT NULL,
+    start_time INTEGER NOT NULL,
+    end_time INTEGER,
+    intake_id INTEGER,
+    submitted_start INTEGER,
+    submitted_end INTEGER,
+    skipped BOOLEAN DEFAULT 0
+  );
