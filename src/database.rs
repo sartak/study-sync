@@ -56,7 +56,7 @@ impl Database {
             .await
     }
 
-    pub async fn start_playing(self: &Self, game: Game) -> Result<Play> {
+    pub async fn started_playing(self: &Self, game: Game) -> Result<Play> {
         let start_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -78,6 +78,26 @@ impl Database {
                     submitted_start: None,
                     submitted_end: None,
                     skipped: false,
+                })
+            })
+            .await
+    }
+
+    pub async fn finished_playing(self: &Self, play: Play) -> Result<Play> {
+        let end_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        self.plays_dbh
+            .call(move |conn| {
+                conn.execute(
+                    "UPDATE plays SET end_time=? WHERE rowid=?",
+                    params![end_time, play.id],
+                )?;
+                Ok(Play {
+                    end_time: Some(end_time),
+                    ..play
                 })
             })
             .await

@@ -66,7 +66,7 @@ impl Orchestrator {
                         }
                     };
 
-                    let play = match self.database.start_playing(game).await {
+                    let play = match self.database.started_playing(game).await {
                         Ok(play) => play,
                         Err(e) => {
                             error!("Could not start play: {e:?}");
@@ -83,13 +83,13 @@ impl Orchestrator {
                         None => continue,
                     };
 
-                    if let Some(previous_play) = &self.current_play {
-                        if previous_play.game.path != path {
-                            error!(
-                                "Previous game does not match! {path:?}, expected {previous_play:?}"
-                            );
+                    if let Some(play) = self.current_play.take() {
+                        if play.game.path != path {
+                            error!("Previous game does not match! {path:?}, expected {play:?}");
+                        } else {
+                            self.current_play = Some(self.database.finished_playing(play).await?);
+                            info!("Play ended {:?}", self.current_play);
                         }
-                        info!("Play ended {previous_play:?}");
                     } else {
                         error!("No previous game!");
                     }
