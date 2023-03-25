@@ -1,9 +1,9 @@
 use crate::database::Database;
 use crate::event::Event;
-use crate::game::Game;
+use crate::game::Play;
 use anyhow::{anyhow, Result};
 use log::{error, info};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
 
 pub struct Orchestrator {
@@ -11,8 +11,8 @@ pub struct Orchestrator {
     hold_screenshots: PathBuf,
     trim_game_prefix: Option<String>,
     database: Database,
-    current_game: Option<Game>,
-    previous_game: Option<Game>,
+    current_play: Option<Play>,
+    previous_play: Option<Play>,
 }
 
 pub fn launch(
@@ -34,8 +34,8 @@ pub fn launch(
             hold_screenshots,
             trim_game_prefix,
             database,
-            current_game: None,
-            previous_game: None,
+            current_play: None,
+            previous_play: None,
         },
         tx,
     ));
@@ -50,21 +50,14 @@ impl Orchestrator {
             info!("Handling {event:?}");
             match event {
                 Event::GameStarted(path) => {
-                    if let Some(previous_game) = &self.current_game {
-                        error!("Already have a current game! {previous_game:?}");
+                    if let Some(previous_play) = &self.current_play {
+                        error!("Already have a current play! {previous_play:?}");
                     }
 
-                    let path = match self.trim_game_prefix {
-                        Some(ref prefix) => match path.strip_prefix(&prefix) {
-                            Ok(p) => p,
-                            Err(e) => {
-                                error!("Could not trim prefix {prefix:?} from {path:?}: {e:?}");
-                                continue;
-                            }
-                        },
-                        None => &path,
+                    let path = match self.fixed_path(&path) {
+                        Some(p) => p,
+                        None => continue,
                     };
-
                     let game = match self.database.game_for_path(&path).await {
                         Ok(game) => game,
                         Err(e) => {
@@ -72,29 +65,47 @@ impl Orchestrator {
                             continue;
                         }
                     };
-                    self.set_current_game(Some(game));
+
+                    let play = match self.database.start_playing(game).await {
+                        Ok(play) => play,
+                        Err(e) => {
+                            error!("Could not start play: {e:?}");
+                            continue;
+                        }
+                    };
+
+                    info!("Play begin {play:?}");
+                    self.set_current_play(Some(play));
                 }
                 Event::GameEnded(path) => {
-                    if let Some(previous_game) = &self.current_game {
-                        if previous_game.path != path {
-                            error!("Previous game does not match! {previous_game:?}");
+                    let path = match self.fixed_path(&path) {
+                        Some(p) => p,
+                        None => continue,
+                    };
+
+                    if let Some(previous_play) = &self.current_play {
+                        if previous_play.game.path != path {
+                            error!(
+                                "Previous game does not match! {path:?}, expected {previous_play:?}"
+                            );
                         }
+                        info!("Play ended {previous_play:?}");
                     } else {
                         error!("No previous game!");
                     }
 
-                    self.set_current_game(None);
+                    self.set_current_play(None);
                 }
                 Event::ScreenshotCreated(path) => {
-                    let game = match self.game() {
-                        Some(g) => g,
+                    let play = match self.playing() {
+                        Some(p) => p,
                         None => {
-                            error!("Screenshot {path:?} created but no current game!");
+                            error!("Screenshot {path:?} created but no current playing!");
                             todo!("move screenshot into {extra_directory:?}");
                         }
                     };
 
-                    info!("Got screenshot {path:?} for {game:?}");
+                    info!("Got screenshot {path:?} for {play:?}");
                 }
                 Event::SaveFileCreated(path) => {}
                 Event::StartShutdown => {}
@@ -103,15 +114,28 @@ impl Orchestrator {
         Ok(())
     }
 
-    fn game(&self) -> Option<&Game> {
-        self.current_game.as_ref().or(self.previous_game.as_ref())
+    fn playing(&self) -> Option<&Play> {
+        self.current_play.as_ref().or(self.previous_play.as_ref())
     }
 
-    fn set_current_game(&mut self, game: Option<Game>) {
-        let current = self.current_game.take();
+    fn set_current_play(&mut self, play: Option<Play>) {
+        let current = self.current_play.take();
         if current.is_some() {
-            self.previous_game = current;
+            self.previous_play = current;
         }
-        self.current_game = game;
+        self.current_play = play;
+    }
+
+    fn fixed_path<'p>(&self, path: &'p Path) -> Option<&'p Path> {
+        match self.trim_game_prefix {
+            Some(ref prefix) => match path.strip_prefix(&prefix) {
+                Ok(p) => Some(p),
+                Err(e) => {
+                    error!("Could not trim prefix {prefix:?} from {path:?}: {e:?}");
+                    None
+                }
+            },
+            None => Some(&path),
+        }
     }
 }
