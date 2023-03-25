@@ -2,7 +2,7 @@ use crate::game::Game;
 use anyhow::Result;
 use log::info;
 use rusqlite::params;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::join;
 use tokio_rusqlite::Connection;
 
@@ -33,8 +33,8 @@ where
 }
 
 impl Database {
-    pub async fn game_for_path(self: &Self, path: &PathBuf) -> Result<Game> {
-        let path = path.clone();
+    pub async fn game_for_path(self: &Self, path: &Path) -> Result<Game> {
+        let path = PathBuf::from(path);
         self.games_dbh
             .call(|conn| {
                 let mut stmt = conn.prepare_cached(
@@ -42,8 +42,7 @@ impl Database {
                 )?;
 
                 let path_param = path.clone();
-                let path_param = path_param.to_str();
-                Ok(stmt.query_row(params![path_param], |row| {
+                Ok(stmt.query_row(params![&path_param.to_str()], |row| {
                     Ok(Game {
                         id: row.get(0)?,
                         path,
