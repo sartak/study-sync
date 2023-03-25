@@ -66,7 +66,7 @@ impl Database {
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO plays (game, start_time) VALUES (?, ?)",
-                    params![game.id, start_time],
+                    params![game.path.to_str(), start_time],
                 )?;
                 let id = conn.last_insert_rowid();
                 Ok(Play {

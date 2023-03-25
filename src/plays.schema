@@ -1,6 +1,6 @@
 CREATE TABLE
   IF NOT EXISTS plays (
-    game INTEGER NOT NULL,
+    game TEXT NOT NULL,
     start_time INTEGER NOT NULL,
     end_time INTEGER,
     intake_id INTEGER,
