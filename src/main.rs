@@ -1,3 +1,4 @@
+mod database;
 mod event;
 mod game;
 mod orchestrator;
@@ -13,6 +14,12 @@ use tokio::select;
 struct Args {
     #[arg(long)]
     listen: String,
+
+    #[arg(long)]
+    plays_database: PathBuf,
+
+    #[arg(long)]
+    games_database: PathBuf,
 
     #[clap(long, required = true, num_args = 1.., value_delimiter = ',')]
     watch_screenshots: Vec<PathBuf>,
@@ -31,9 +38,10 @@ async fn main() -> Result<()> {
         .filter_level(args.verbose.log_level_filter())
         .init();
 
-    let listen = args.listen.parse().unwrap();
+    let listen = args.listen.parse()?;
+    let dbh = database::connect(args.plays_database, args.games_database).await?;
 
-    let (orchestrator, tx) = orchestrator::launch(args.hold_screenshots)?;
+    let (orchestrator, tx) = orchestrator::launch(dbh, args.hold_screenshots)?;
     let server = server::launch(&listen, tx.clone());
     let screenshots = watch::launch(
         args.watch_screenshots,

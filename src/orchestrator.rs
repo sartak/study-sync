@@ -1,3 +1,4 @@
+use crate::database::Database;
 use crate::event::Event;
 use crate::game::Game;
 use anyhow::{anyhow, Result};
@@ -8,11 +9,15 @@ use tokio::sync::mpsc;
 pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
     hold_screenshots: PathBuf,
+    database: Database,
     current_game: Option<Game>,
     previous_game: Option<Game>,
 }
 
-pub fn launch(hold_screenshots: PathBuf) -> Result<(Orchestrator, mpsc::UnboundedSender<Event>)> {
+pub fn launch(
+    database: Database,
+    hold_screenshots: PathBuf,
+) -> Result<(Orchestrator, mpsc::UnboundedSender<Event>)> {
     let (tx, rx) = mpsc::unbounded_channel();
 
     if !hold_screenshots.is_dir() {
@@ -25,6 +30,7 @@ pub fn launch(hold_screenshots: PathBuf) -> Result<(Orchestrator, mpsc::Unbounde
         Orchestrator {
             rx,
             hold_screenshots,
+            database,
             current_game: None,
             previous_game: None,
         },
