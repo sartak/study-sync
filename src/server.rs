@@ -6,7 +6,7 @@ use axum::{
 use log::{error, info};
 use serde::Deserialize;
 use std::path::PathBuf;
-use tokio::sync::mpsc;
+use tokio::{fs::canonicalize, sync::mpsc};
 
 pub async fn launch(
     address: &std::net::SocketAddr,
@@ -37,13 +37,22 @@ async fn game_get(
     Query(params): Query<GameParams>,
     State(tx): State<mpsc::UnboundedSender<Event>>,
 ) -> impl IntoResponse {
+    let file = match canonicalize(params.file).await {
+        Ok(f) => f,
+        Err(e) => {
+            let e = anyhow!(e).context("failed to canonicalize path");
+            error!("GET /game -> 500 ({e:?})");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
     let event = match params.event.as_str() {
-        "start" => Event::GameStarted(params.file),
-        "end" => Event::GameEnded(params.file),
+        "start" => Event::GameStarted(file),
+        "end" => Event::GameEnded(file),
         _ => {
             info!(
-                "GET /game {params:?} -> 400 (invalid event: {})",
-                params.event
+                "GET /game (file {:?}) -> 400 (invalid event: {})",
+                file, params.event
             );
             return (
                 StatusCode::BAD_REQUEST,
