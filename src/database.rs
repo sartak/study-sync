@@ -1,8 +1,9 @@
-use crate::game::Game;
+use crate::game::{Game, Play};
 use anyhow::Result;
 use log::info;
 use rusqlite::params;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::join;
 use tokio_rusqlite::Connection;
 
@@ -51,6 +52,33 @@ impl Database {
                         label: row.get(3)?,
                     })
                 })?)
+            })
+            .await
+    }
+
+    pub async fn start_playing(self: &Self, game: Game) -> Result<Play> {
+        let start_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        self.plays_dbh
+            .call(move |conn| {
+                conn.execute(
+                    "INSERT INTO plays (game, start_time) VALUES (?, ?)",
+                    params![game.id, start_time],
+                )?;
+                let id = conn.last_insert_rowid();
+                Ok(Play {
+                    id,
+                    game,
+                    start_time,
+                    end_time: None,
+                    intake_id: None,
+                    submitted_start: None,
+                    submitted_end: None,
+                    skipped: false,
+                })
             })
             .await
     }
