@@ -1,5 +1,6 @@
 [Unit]
 Description=study-sync
+After=clean-lastfile.service
 
 [Service]
 ExecStart=/usr/local/bin/study-sync-wrapper.sh
