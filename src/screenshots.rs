@@ -68,14 +68,18 @@ impl Screenshots {
                     let form = multipart::Form::new().part("screenshot", part);
                     match self.agent().post(&url).multipart(form).send().await {
                         Ok(res) => {
-                            match res.text().await {
-                                Ok(message) => {
-                                    info!("Successfully uploaded {path:?} to {directory:?}: {message}");
-                                    break;
+                            if res.status().is_success() {
+                                match res.text().await {
+                                    Ok(message) => {
+                                        info!("Successfully uploaded {path:?} to {directory:?}: {message}");
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to parse upload response for {path:?} into text: {e:?}");
+                                    }
                                 }
-                                Err(e) => {
-                                    error!("Failed to parse upload response for {path:?} into text: {e:?}");
-                                }
+                            } else {
+                                error!("Failed to upload {path:?} for {directory:?}: got status code {}", res.status());
                             }
                         }
                         Err(e) => {

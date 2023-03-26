@@ -196,27 +196,36 @@ impl Intake {
                 .as_secs();
 
             match self.agent().post(url).json(&request).send().await {
-                Ok(res) => match res.json().await {
-                    Ok(IntakeResponse {
-                        error: Some(error), ..
-                    }) => {
-                        error!("Error POSTing {url:?} from server: {error}")
+                Ok(res) => {
+                    if res.status().is_success() {
+                        match res.json().await {
+                            Ok(IntakeResponse {
+                                error: Some(error), ..
+                            }) => {
+                                error!("Error POSTing {url:?} from server: {error}")
+                            }
+                            Ok(IntakeResponse {
+                                message: Some(message),
+                                object: Some(IntakeResponseObject { rowid }),
+                                ..
+                            }) => {
+                                info!("Success POSTing {url:?}: {message}");
+                                break (rowid, submitted);
+                            }
+                            Ok(res) => {
+                                error!("Error pattern-matching POST {url:?} response: {res:?}")
+                            }
+                            Err(e) => {
+                                error!("Error decoding POST {url:?} response as JSON: {e:?}")
+                            }
+                        }
+                    } else {
+                        error!(
+                            "Error POSTing {url:?} with {request:?}: got status code {}",
+                            res.status()
+                        );
                     }
-                    Ok(IntakeResponse {
-                        message: Some(message),
-                        object: Some(IntakeResponseObject { rowid }),
-                        ..
-                    }) => {
-                        info!("Success POSTing {url:?}: {message}");
-                        break (rowid, submitted);
-                    }
-                    Ok(res) => {
-                        error!("Error pattern-matching POST {url:?} response: {res:?}")
-                    }
-                    Err(e) => {
-                        error!("Error decoding POST {url:?} response as JSON: {e:?}")
-                    }
-                },
+                }
                 Err(e) => {
                     error!("Error POSTing {url:?} with {request:?}: {e:?}");
                 }
@@ -249,26 +258,35 @@ impl Intake {
                 .as_secs();
 
             match self.agent().patch(url).json(&request).send().await {
-                Ok(res) => match res.json().await {
-                    Ok(IntakeResponse {
-                        error: Some(error), ..
-                    }) => {
-                        error!("Error PATCHing {url:?} from server: {error}")
+                Ok(res) => {
+                    if res.status().is_success() {
+                        match res.json().await {
+                            Ok(IntakeResponse {
+                                error: Some(error), ..
+                            }) => {
+                                error!("Error PATCHing {url:?} from server: {error}")
+                            }
+                            Ok(IntakeResponse {
+                                message: Some(message),
+                                ..
+                            }) => {
+                                info!("Success PATCHing {url:?}: {message}");
+                                break submitted;
+                            }
+                            Ok(res) => {
+                                error!("Error pattern-matching PATCH {url:?} response: {res:?}")
+                            }
+                            Err(e) => {
+                                error!("Error decoding PATCH {url:?} response as JSON: {e:?}")
+                            }
+                        }
+                    } else {
+                        error!(
+                            "Error POSTing {url:?} with {request:?}: got status code {}",
+                            res.status()
+                        );
                     }
-                    Ok(IntakeResponse {
-                        message: Some(message),
-                        ..
-                    }) => {
-                        info!("Success PATCHing {url:?}: {message}");
-                        break submitted;
-                    }
-                    Ok(res) => {
-                        error!("Error pattern-matching PATCH {url:?} response: {res:?}")
-                    }
-                    Err(e) => {
-                        error!("Error decoding PATCH {url:?} response as JSON: {e:?}")
-                    }
-                },
+                }
                 Err(e) => {
                     error!("Error PATCHing {url:?} with {request:?}: {e:?}");
                 }
