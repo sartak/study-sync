@@ -198,6 +198,13 @@ impl Orchestrator {
                     intake_id,
                     submitted_start,
                 } => {
+                    if let Some(play) = &mut self.current_play {
+                        if play.id == play_id {
+                            play.intake_id = Some(intake_id.clone());
+                            play.submitted_start = Some(submitted_start);
+                        }
+                    }
+
                     if let Err(e) = self
                         .database
                         .initial_intake(play_id, intake_id, submitted_start)
@@ -210,6 +217,12 @@ impl Orchestrator {
                     play_id,
                     submitted_end,
                 } => {
+                    if let Some(play) = &mut self.current_play {
+                        if play.id == play_id {
+                            play.submitted_end = Some(submitted_end);
+                        }
+                    }
+
                     if let Err(e) = self.database.final_intake(play_id, submitted_end).await {
                         error!("Could not update intake: {e:?}")
                     }
@@ -220,6 +233,14 @@ impl Orchestrator {
                     submitted_start,
                     submitted_end,
                 } => {
+                    if let Some(play) = &mut self.current_play {
+                        if play.id == play_id {
+                            play.intake_id = Some(intake_id.clone());
+                            play.submitted_start = Some(submitted_start);
+                            play.submitted_end = Some(submitted_end);
+                        }
+                    }
+
                     if let Err(e) = self
                         .database
                         .full_intake(play_id, intake_id, submitted_start, submitted_end)
