@@ -12,12 +12,14 @@ clap = { version = "4.1.11", features = ["derive"] }
 clap-verbosity-flag = "2.0.0"
 env_logger = "0.10.0"
 futures = "0.3.27"
+hex = "0.4.3"
 itertools = "0.10.5"
 log = { version = "0.4.17", features = ["serde"] }
 notify = { version = "5.1.0", default-features = false, features = ["serde"] }
 reqwest = { version = "0.11.15", default-features = false, features = ["json", "serde_json", "stream"] }
 rusqlite = "0.28.0"
 serde = "1.0.158"
+sha1 = "0.10.5"
 tokio = { version = "1.26.0", features = ["full"] }
 tokio-rusqlite = "0.3.0"
 tokio-util = { version = "0.7.7", features = ["codec"] }
