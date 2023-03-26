@@ -15,7 +15,7 @@ pub struct Orchestrator {
     previous_play: Option<Play>,
 }
 
-pub fn launch(
+pub async fn launch(
     database: Database,
     hold_screenshots: PathBuf,
     trim_game_prefix: Option<String>,
@@ -28,13 +28,19 @@ pub fn launch(
         ));
     }
 
+    let previous = database.load_previously_playing().await?;
+    match &previous {
+        Some(p) => info!("Found previously-playing game {p:?}"),
+        None => info!("No previously-playing game found"),
+    };
+
     return Ok((
         Orchestrator {
             rx,
             hold_screenshots,
             trim_game_prefix,
             database,
-            current_play: None,
+            current_play: previous,
             previous_play: None,
         },
         tx,

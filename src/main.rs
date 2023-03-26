@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
     let dbh = database::connect(args.plays_database, args.games_database).await?;
 
     let (orchestrator, tx) =
-        orchestrator::launch(dbh, args.hold_screenshots, args.trim_game_prefix)?;
+        orchestrator::launch(dbh, args.hold_screenshots, args.trim_game_prefix).await?;
     let server = server::launch(&listen, tx.clone());
     let screenshots = watch::launch(
         args.watch_screenshots,
