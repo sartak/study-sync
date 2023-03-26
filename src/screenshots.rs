@@ -53,11 +53,6 @@ impl Screenshots {
         Ok(())
     }
 
-    fn agent(&self) -> reqwest::Client {
-        let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(30));
-        builder.build().unwrap()
-    }
-
     async fn upload_path_to_directory(&self, path: &Path, directory: String) -> () {
         let mut url = format!("{}/{directory}", self.screenshot_url);
         let extension = path
@@ -98,8 +93,10 @@ impl Screenshots {
                 Ok(file) => {
                     let stream = FramedRead::new(file, BytesCodec::new());
                     let body = Body::wrap_stream(stream);
-                    match self
-                        .agent()
+
+                    let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(30));
+                    let client = builder.build().unwrap();
+                    match client
                         .post(&url)
                         .header(reqwest::header::CONTENT_TYPE, content_type)
                         .body(body)

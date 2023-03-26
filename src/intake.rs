@@ -32,14 +32,14 @@ pub enum Event {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 struct IntakeResponse {
     message: Option<String>,
     error: Option<String>,
     object: Option<IntakeResponseObject>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 struct IntakeResponseObject {
     rowid: String,
 }
@@ -157,11 +157,6 @@ impl Intake {
         Ok(())
     }
 
-    fn agent(&self) -> reqwest::Client {
-        let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(10));
-        builder.build().unwrap()
-    }
-
     async fn create_intake(
         &self,
         game_label: String,
@@ -169,7 +164,7 @@ impl Intake {
         start_time: u64,
         end_time: Option<u64>,
     ) -> (String, u64) {
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Serialize)]
         struct Request {
             #[serde(rename = "startTime")]
             start_time: u64,
@@ -180,8 +175,6 @@ impl Intake {
             language: String,
         }
 
-        let url = &self.intake_url;
-
         let request = Request {
             start_time,
             end_time,
@@ -189,67 +182,33 @@ impl Intake {
             language: language.intake_str(),
         };
 
-        loop {
-            let submitted = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-
-            match self.agent().post(url).json(&request).send().await {
-                Ok(res) => {
-                    if res.status().is_success() {
-                        match res.json().await {
-                            Ok(IntakeResponse {
-                                error: Some(error), ..
-                            }) => {
-                                error!("Error POSTing {url:?} from server: {error}")
-                            }
-                            Ok(IntakeResponse {
-                                message: Some(message),
-                                object: Some(IntakeResponseObject { rowid }),
-                                ..
-                            }) => {
-                                info!("Success POSTing {url:?}: {message}");
-                                break (rowid, submitted);
-                            }
-                            Ok(res) => {
-                                error!("Error pattern-matching POST {url:?} response: {res:?}")
-                            }
-                            Err(e) => {
-                                error!("Error decoding POST {url:?} response as JSON: {e:?}")
-                            }
-                        }
-                    } else {
-                        error!(
-                            "Error POSTing {url:?} with {request:?}: got status code {}",
-                            res.status()
-                        );
-                    }
-                }
-                Err(e) => {
-                    error!("Error POSTing {url:?} with {request:?}: {e:?}");
-                }
-            }
-
-            info!("Sleeping for 5s before trying again");
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        }
+        let (submitted, IntakeResponseObject { rowid }) =
+            self.request(reqwest::Method::POST, request).await;
+        (rowid, submitted)
     }
 
     async fn finish_intake(&self, intake_id: String, end_time: u64) -> u64 {
-        #[derive(Debug, Serialize, Deserialize)]
+        #[derive(Debug, Serialize)]
         struct Request {
             rowid: String,
             #[serde(rename = "endTime")]
             end_time: u64,
         }
 
-        let url = &self.intake_url;
-
         let request = Request {
             rowid: intake_id,
             end_time,
         };
+
+        let (submitted, _) = self.request(reqwest::Method::PATCH, request).await;
+        submitted
+    }
+
+    async fn request<R>(&self, method: reqwest::Method, request: R) -> (u64, IntakeResponseObject)
+    where
+        R: Serialize + std::fmt::Debug,
+    {
+        let url = &self.intake_url;
 
         loop {
             let submitted = SystemTime::now()
@@ -257,38 +216,49 @@ impl Intake {
                 .unwrap()
                 .as_secs();
 
-            match self.agent().patch(url).json(&request).send().await {
+            let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(10));
+            let client = builder.build().unwrap();
+
+            match client
+                .request(method.clone(), url)
+                .json(&request)
+                .send()
+                .await
+            {
                 Ok(res) => {
                     if res.status().is_success() {
                         match res.json().await {
                             Ok(IntakeResponse {
                                 error: Some(error), ..
                             }) => {
-                                error!("Error PATCHing {url:?} from server: {error}")
+                                error!("Error {method:?}ing {url:?} from server: {error}")
                             }
                             Ok(IntakeResponse {
                                 message: Some(message),
+                                object: Some(obj),
                                 ..
                             }) => {
-                                info!("Success PATCHing {url:?}: {message}");
-                                break submitted;
+                                info!("Success {method:?}ing {url:?}: {message}");
+                                break (submitted, obj);
                             }
                             Ok(res) => {
-                                error!("Error pattern-matching PATCH {url:?} response: {res:?}")
+                                error!(
+                                    "Error pattern-matching {method:?} {url:?} response: {res:?}"
+                                )
                             }
                             Err(e) => {
-                                error!("Error decoding PATCH {url:?} response as JSON: {e:?}")
+                                error!("Error decoding {method:?} {url:?} response as JSON: {e:?}")
                             }
                         }
                     } else {
                         error!(
-                            "Error POSTing {url:?} with {request:?}: got status code {}",
+                            "Error {method:?}ing {url:?} with {request:?}: got status code {}",
                             res.status()
                         );
                     }
                 }
                 Err(e) => {
-                    error!("Error PATCHing {url:?} with {request:?}: {e:?}");
+                    error!("Error {method:?}ing {url:?} with {request:?}: {e:?}");
                 }
             }
 
