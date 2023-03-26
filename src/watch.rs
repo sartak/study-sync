@@ -1,4 +1,4 @@
-use crate::event::Event;
+use crate::orchestrator::Event;
 use anyhow::{anyhow, Context, Result};
 use futures::{
     channel::mpsc::{channel, Receiver},

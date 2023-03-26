@@ -1,10 +1,18 @@
 use crate::database::Database;
-use crate::event::Event;
 use crate::game::Play;
 use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
+
+#[derive(Debug)]
+pub enum Event {
+    GameStarted(PathBuf),
+    GameEnded(PathBuf),
+    ScreenshotCreated(PathBuf),
+    SaveFileCreated(PathBuf),
+    StartShutdown,
+}
 
 pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,

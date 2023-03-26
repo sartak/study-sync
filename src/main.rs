@@ -1,5 +1,4 @@
 mod database;
-mod event;
 mod game;
 mod orchestrator;
 mod server;
