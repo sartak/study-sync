@@ -35,7 +35,7 @@ where
 
 async fn save_currently_playing(dbh: Connection, id: Option<i64>) -> Result<()> {
     dbh.call(move |conn| {
-        conn.execute("DELETE FROM current", params![])?;
+        conn.execute("DELETE FROM current", [])?;
         if let Some(id) = id {
             conn.execute("INSERT INTO current (play) VALUES (?)", params![id])?;
         }
@@ -124,22 +124,32 @@ impl Database {
     }
 
     pub async fn load_previously_playing(self: &Self) -> Result<Option<Play>> {
-        let current: Option<(i64, String, u64, Option<u64>, Option<u64>, Option<u64>, Option<u64>, bool)> = self
+        struct Current {
+            rowid: i64,
+            game_path: String,
+            start_time: u64,
+            end_time: Option<u64>,
+            intake_id: Option<u64>,
+            submitted_start: Option<u64>,
+            submitted_end: Option<u64>,
+            skipped: bool,
+        }
+
+        let current: Option<Current> = self
             .plays_dbh
             .call(|conn| {
                 let mut stmt = conn.prepare_cached("SELECT rowid, game, start_time, end_time, intake_id, submitted_start, submitted_end, skipped FROM plays WHERE rowid = (SELECT play FROM current)")?;
 
-                let current = stmt.query_row(params![], |row| Ok((
-                                row.get(0)?,
-                                row.get(1)?,
-                                row.get(2)?,
-                                row.get(3)?,
-                                row.get(4)?,
-                                row.get(5)?,
-                                row.get(6)?,
-                                row.get(7)?,
-                                )))
-                        .optional()?;
+                let current = stmt.query_row([], |row| Ok(Current {
+                    rowid: row.get(0)?,
+                    game_path: row.get(1)?,
+                    start_time: row.get(2)?,
+                    end_time: row.get(3)?,
+                    intake_id: row.get(4)?,
+                    submitted_start: row.get(5)?,
+                    submitted_end: row.get(6)?,
+                    skipped: row.get(7)?,
+                })).optional()?;
 
                 Ok::<_, rusqlite::Error>(current)
             })
@@ -149,17 +159,19 @@ impl Database {
             None => return Ok(None),
         };
 
-        let game = self.game_for_path(&PathBuf::from(current.1)).await?;
+        let game = self
+            .game_for_path(&PathBuf::from(current.game_path))
+            .await?;
 
         Ok(Some(Play {
-            id: current.0,
+            id: current.rowid,
             game,
-            start_time: current.2,
-            end_time: current.3,
-            intake_id: current.4,
-            submitted_start: current.5,
-            submitted_end: current.6,
-            skipped: current.7,
+            start_time: current.start_time,
+            end_time: current.end_time,
+            intake_id: current.intake_id,
+            submitted_start: current.submitted_start,
+            submitted_end: current.submitted_end,
+            skipped: current.skipped,
         }))
     }
 }
