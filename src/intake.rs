@@ -1,9 +1,28 @@
-use crate::game::Play;
-use anyhow::{anyhow, Result};
-use log::{error, info};
-use std::path::{Path, PathBuf};
+use crate::game::Language;
+use anyhow::Result;
 use tokio::sync::mpsc;
 
+#[derive(Debug)]
+pub enum Event {
+    SubmitStarted {
+        play_id: i64,
+        game_label: String,
+        language: Language,
+        start_time: u64,
+    },
+    SubmitEnded {
+        play_id: i64,
+        intake_id: u64,
+        end_time: u64,
+    },
+    SubmitFull {
+        play_id: i64,
+        game_label: String,
+        language: Language,
+        start_time: u64,
+        end_time: u64,
+    },
+}
 
 pub struct IntakePre {
     rx: mpsc::UnboundedReceiver<Event>,
@@ -28,7 +47,26 @@ impl IntakePre {
 impl Intake {
     pub async fn start(mut self) -> Result<()> {
         while let Some(event) = self.rx.recv().await {
-            match event {}
+            match event {
+                Event::SubmitStarted {
+                    play_id,
+                    game_label,
+                    language,
+                    start_time,
+                } => {}
+                Event::SubmitEnded {
+                    play_id,
+                    intake_id,
+                    end_time,
+                } => {}
+                Event::SubmitFull {
+                    play_id,
+                    game_label,
+                    language,
+                    start_time,
+                    end_time,
+                } => {}
+            }
         }
         Ok(())
     }
