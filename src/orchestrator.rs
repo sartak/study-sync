@@ -70,7 +70,17 @@ impl OrchestratorPre {
 
         let previous = previous?;
         match &previous {
-            Some(p) => info!("Found previously-playing game {p:?}"),
+            Some(p) => {
+                info!("Found previously-playing game {p:?}");
+                if p.end_time.is_none() {
+                    if let Some(intake_id) = &p.intake_id {
+                        intake_tx.send(intake::Event::PreviousGame {
+                            play_id: p.id,
+                            intake_id: intake_id.clone(),
+                        })?;
+                    }
+                }
+            }
             None => info!("No previously-playing game found"),
         };
 

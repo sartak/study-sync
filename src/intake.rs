@@ -8,6 +8,10 @@ use tokio::sync::mpsc;
 
 #[derive(Debug)]
 pub enum Event {
+    PreviousGame {
+        play_id: i64,
+        intake_id: String,
+    },
     SubmitStarted {
         play_id: i64,
         game_label: String,
@@ -77,6 +81,9 @@ impl Intake {
         while let Some(event) = self.rx.recv().await {
             info!("Handling event {event:?}");
             match event {
+                Event::PreviousGame { play_id, intake_id } => {
+                    self.play_to_intake.insert(play_id, intake_id);
+                }
                 Event::SubmitStarted {
                     play_id,
                     game_label,
