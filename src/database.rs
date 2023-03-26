@@ -289,4 +289,43 @@ impl Database {
             })
             .collect())
     }
+
+    pub async fn intake_update(
+        self: &Self,
+        play_id: i64,
+        intake_id: Option<u64>,
+        submitted_start: Option<u64>,
+        submitted_end: Option<u64>,
+    ) -> Result<()> {
+        self.plays_dbh
+            .call(move |conn| {
+                let mut params = vec![];
+                let mut updates = vec![];
+
+                if let Some(intake_id) = intake_id {
+                    params.push(intake_id);
+                    updates.push("intake_id=?");
+                }
+
+                if let Some(submitted_start) = submitted_start {
+                    params.push(submitted_start);
+                    updates.push("submitted_start=?");
+                }
+
+                if let Some(submitted_end) = submitted_end {
+                    params.push(submitted_end);
+                    updates.push("submitted_end=?");
+                }
+
+                let updates = updates.join(", ");
+
+                // rusqlite doesn't make it very easy to handle dynamically-generated SQL, but
+                // since we know updates and play_id are safe, this is safe
+                let sql = format!("UPDATE plays SET {updates} WHERE rowid={play_id}");
+
+                conn.execute(&sql, rusqlite::params_from_iter(params))?;
+                Ok(())
+            })
+            .await
+    }
 }
