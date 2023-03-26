@@ -3,6 +3,7 @@ use crate::{database::Database, intake};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::path::{Path, PathBuf};
+use tokio::join;
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
@@ -47,11 +48,29 @@ impl OrchestratorPre {
             ));
         }
 
-        let previous = database.load_previously_playing().await?;
+        let (previous, backlog) = join!(
+            database.load_previously_playing(),
+            database.load_intake_backlog(),
+        );
+
+        let previous = previous?;
         match &previous {
             Some(p) => info!("Found previously-playing game {p:?}"),
             None => info!("No previously-playing game found"),
         };
+
+        let backlog = backlog?;
+        if backlog.is_empty() {
+            info!("No backlog of intake submissions found");
+        } else {
+            info!(
+                "Found backlog of {} intake submissions: {backlog:?}",
+                backlog.len()
+            );
+            for e in backlog {
+                intake_tx.send(e)?;
+            }
+        }
 
         let orchestrator = Orchestrator {
             rx: self.rx,

@@ -1,7 +1,11 @@
 use crate::game::{Game, Play};
+use crate::intake;
 use anyhow::Result;
+use futures::future::try_join_all;
+use itertools::Itertools;
 use log::{error, info};
 use rusqlite::{params, OptionalExtension};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::join;
@@ -173,5 +177,116 @@ impl Database {
             submitted_end: current.submitted_end,
             skipped: current.skipped,
         }))
+    }
+
+    pub async fn load_intake_backlog(self: &Self) -> Result<Vec<intake::Event>> {
+        struct PartialPlay {
+            rowid: i64,
+            game_path: String,
+            start_time: u64,
+            end_time: Option<u64>,
+            intake_id: Option<u64>,
+        }
+
+        let plays = self.plays_dbh.call(|conn| {
+            let mut stmt = conn.prepare("SELECT rowid, game, start_time, end_time, intake_id FROM plays WHERE submitted_end IS NULL AND skipped = 0")?;
+
+            let plays = stmt.query_map([], |row| {
+                Ok(PartialPlay{
+                    rowid: row.get(0)?,
+                    game_path: row.get(1)?,
+                    start_time: row.get(2)?,
+                    end_time: row.get(3)?,
+                    intake_id: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, rusqlite::Error>>()?;
+
+            Ok::<_, rusqlite::Error>(plays)
+        }).await?;
+
+        if plays.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let games = try_join_all(
+            plays
+                .iter()
+                .map(|p| &p.game_path)
+                .unique()
+                .map(|p| self.game_for_path(Path::new(p))),
+        )
+        .await?;
+
+        let games: HashMap<String, Game> = games
+            .into_iter()
+            .map(|g| (g.path.to_str().unwrap().to_owned(), g))
+            .collect();
+
+        Ok(plays
+            .into_iter()
+            .filter_map(|p| {
+                let Game {
+                    language,
+                    label: game_label,
+                    ..
+                } = match games.get(&p.game_path) {
+                    Some(g) => g,
+                    None => {
+                        error!("Did not find mapping for game {}", p.game_path);
+                        return None;
+                    }
+                };
+
+                let language = language.clone();
+                let game_label = game_label.clone();
+
+                match p {
+                    PartialPlay {
+                        end_time: None,
+                        intake_id: Some(_),
+                        ..
+                    } => None,
+
+                    PartialPlay {
+                        rowid,
+                        start_time,
+                        end_time: None,
+                        intake_id: None,
+                        ..
+                    } => Some(intake::Event::SubmitStarted {
+                        play_id: rowid,
+                        game_label,
+                        language,
+                        start_time,
+                    }),
+
+                    PartialPlay {
+                        rowid,
+                        end_time: Some(end_time),
+                        intake_id: Some(intake_id),
+                        ..
+                    } => Some(intake::Event::SubmitEnded {
+                        play_id: rowid,
+                        intake_id,
+                        end_time,
+                    }),
+
+                    PartialPlay {
+                        rowid,
+                        start_time,
+                        end_time: Some(end_time),
+                        intake_id: None,
+                        ..
+                    } => Some(intake::Event::SubmitFull {
+                        play_id: rowid,
+                        game_label,
+                        language,
+                        start_time,
+                        end_time,
+                    }),
+                }
+            })
+            .collect())
     }
 }
