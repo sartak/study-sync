@@ -13,3 +13,9 @@ CREATE TABLE
   IF NOT EXISTS current (
     play INTEGER NOT NULL
   );
+
+CREATE INDEX
+  IF NOT EXISTS plays_pending
+  ON plays(start_time)
+  WHERE submitted_end IS NULL
+  AND skipped = 0;
