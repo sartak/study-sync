@@ -33,6 +33,7 @@ pub struct IntakePre {
 pub struct Intake {
     rx: mpsc::UnboundedReceiver<Event>,
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
+    intake_url: String,
     play_to_intake: HashMap<i64, u64>,
 }
 
@@ -45,10 +46,12 @@ impl IntakePre {
     pub async fn start(
         self,
         orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
+        intake_url: String,
     ) -> Result<()> {
         let intake = Intake {
             rx: self.rx,
             orchestrator_tx,
+            intake_url,
             play_to_intake: HashMap::new(),
         };
         intake.start().await

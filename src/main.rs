@@ -24,6 +24,9 @@ struct Args {
     #[arg(long)]
     trim_game_prefix: Option<String>,
 
+    #[arg(long)]
+    intake_url: String,
+
     #[clap(long, required = true, num_args = 1.., value_delimiter = ',')]
     watch_screenshots: Vec<PathBuf>,
 
@@ -58,7 +61,7 @@ async fn main() -> Result<()> {
 
     let orchestrator =
         orchestrator.start(dbh, args.hold_screenshots, args.trim_game_prefix, intake_tx);
-    let intake = intake.start(orchestrator_tx.clone());
+    let intake = intake.start(orchestrator_tx.clone(), args.intake_url);
 
     select! {
         res = server => { res }
