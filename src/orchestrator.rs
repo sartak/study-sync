@@ -213,7 +213,7 @@ impl Orchestrator {
                 Event::ScreenshotCreated(path) => {
                     if let Some(play) = self.playing() {
                         let mut destination = self.current_dir().unwrap();
-                        destination.set_file_name(self.now());
+                        destination.push(self.now());
                         destination.set_extension(
                             path.extension()
                                 .unwrap_or_else(|| std::ffi::OsStr::new("png")),
@@ -249,7 +249,7 @@ impl Orchestrator {
                         }
                     } else {
                         let mut destination = extra_directory.clone();
-                        destination.set_file_name(path.file_name().unwrap());
+                        destination.push(path.file_name().unwrap());
                         error!("Dropping screenshot {path:?} to {destination:?} because no current playing!");
                         if let Err(e) = rename(&path, &destination).await {
                             error!("Could not move screenshot {path:?} to {destination:?}: {e:?}");
