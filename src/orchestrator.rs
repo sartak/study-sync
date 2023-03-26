@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::fs::{create_dir_all, rename};
+use tokio::fs::{create_dir_all, hard_link, remove_file, rename};
 use tokio::join;
 use tokio::sync::mpsc;
 
@@ -127,6 +127,15 @@ impl Orchestrator {
                         error!("Already have a current play! {previous_play:?}");
                     }
 
+                    if let Err(e) = remove_file(&latest_screenshot).await {
+                        if e.kind() != std::io::ErrorKind::NotFound {
+                            error!(
+                                "Could not remove latest screenshot {latest_screenshot:?}: {e:?}"
+                            );
+                            continue;
+                        }
+                    }
+
                     let path = match self.fixed_path(&path) {
                         Some(p) => p,
                         None => continue,
@@ -214,6 +223,11 @@ impl Orchestrator {
 
                         if let Err(e) = rename(&path, &destination).await {
                             error!("Could not move screenshot {path:?} to {destination:?}: {e:?}");
+                            continue;
+                        }
+
+                        if let Err(e) = hard_link(&destination, &latest_screenshot).await {
+                            error!("Could not hardlink screenshot {path:?} to {latest_screenshot:?}: {e:?}");
                             continue;
                         }
 
