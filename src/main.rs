@@ -1,5 +1,6 @@
 mod database;
 mod game;
+mod intake;
 mod orchestrator;
 mod server;
 mod watch;
@@ -43,19 +44,26 @@ async fn main() -> Result<()> {
     let listen = args.listen.parse()?;
     let dbh = database::connect(args.plays_database, args.games_database).await?;
 
-    let (orchestrator, tx) =
-        orchestrator::launch(dbh, args.hold_screenshots, args.trim_game_prefix).await?;
-    let server = server::launch(&listen, tx.clone());
+    let (intake, intake_tx) = intake::launch().await?;
+
+    let (orchestrator, orchestrator_tx) =
+        orchestrator::launch(dbh, args.hold_screenshots, args.trim_game_prefix, intake_tx).await?;
+
+    let server = server::launch(&listen, orchestrator_tx.clone());
+
     let screenshots = watch::launch(
         args.watch_screenshots,
         watch::WatchTarget::Screenshots,
-        tx.clone(),
+        orchestrator_tx.clone(),
     );
-    let handler = orchestrator.start();
+
+    let orchestrator = orchestrator.start();
+    let intake = intake.start();
 
     select! {
         res = server => { res }
         res = screenshots => { res }
-        res = handler => { res }
+        res = orchestrator => { res }
+        res = intake => { res }
     }
 }

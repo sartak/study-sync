@@ -1,5 +1,5 @@
-use crate::database::Database;
 use crate::game::Play;
+use crate::{database::Database, intake};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::path::{Path, PathBuf};
@@ -16,6 +16,7 @@ pub enum Event {
 
 pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
+    intake_tx: mpsc::UnboundedSender<intake::Event>,
     hold_screenshots: PathBuf,
     trim_game_prefix: Option<String>,
     database: Database,
@@ -27,6 +28,7 @@ pub async fn launch(
     database: Database,
     hold_screenshots: PathBuf,
     trim_game_prefix: Option<String>,
+    intake_tx: mpsc::UnboundedSender<intake::Event>,
 ) -> Result<(Orchestrator, mpsc::UnboundedSender<Event>)> {
     let (tx, rx) = mpsc::unbounded_channel();
 
@@ -45,6 +47,7 @@ pub async fn launch(
     return Ok((
         Orchestrator {
             rx,
+            intake_tx,
             hold_screenshots,
             trim_game_prefix,
             database,
