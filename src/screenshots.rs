@@ -1,6 +1,7 @@
 use anyhow::Result;
 use log::{error, info};
 use reqwest::Body;
+use sha1::{Digest, Sha1};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs::{remove_file, File};
@@ -58,7 +59,7 @@ impl Screenshots {
     }
 
     async fn upload_path_to_directory(&self, path: &Path, directory: String) -> () {
-        let url = format!("{}/{directory}", self.screenshot_url);
+        let mut url = format!("{}/{directory}", self.screenshot_url);
         let extension = path
             .extension()
             .and_then(std::ffi::OsStr::to_str)
@@ -67,6 +68,29 @@ impl Screenshots {
             "image/jpeg"
         } else {
             "image/png"
+        };
+
+        let res = {
+            let path = path.to_owned();
+            tokio::task::spawn_blocking(move || -> Result<String> {
+                let mut file = std::fs::File::open(&path)?;
+                let mut hasher = Sha1::new();
+                std::io::copy(&mut file, &mut hasher)?;
+                Ok(hex::encode(hasher.finalize()))
+            })
+            .await
+        };
+        match res {
+            Ok(Ok(digest)) => {
+                let param = format!("?screenshot_digest={digest}");
+                url.push_str(&param);
+            }
+            Ok(Err(e)) => {
+                error!("Could not calculate digest of {path:?}: {e:?}");
+            }
+            Err(e) => {
+                error!("Could not join future for calculating digest of {path:?}: {e:?}");
+            }
         };
 
         loop {
