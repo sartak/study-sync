@@ -2,6 +2,8 @@ use crate::{database::Database, game::Play, intake, screenshots};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::fs::{create_dir_all, rename};
 use tokio::join;
 use tokio::sync::mpsc;
 
@@ -160,6 +162,12 @@ impl Orchestrator {
                             error!("Could not send to intake: {e:?}");
                         }
                     }
+
+                    if let Some(dir) = self.current_dir() {
+                        if let Err(e) = create_dir_all(&dir).await {
+                            error!("Could not create {dir:?}: {e:?}");
+                        }
+                    }
                 }
                 Event::GameEnded(path) => {
                     let path = match self.fixed_path(&path) {
@@ -195,16 +203,35 @@ impl Orchestrator {
                 }
                 Event::ScreenshotCreated(path) => {
                     if let Some(play) = self.playing() {
-                        info!("Got screenshot {path:?} for {play:?}");
-                        // todo move
-                        // todo hardlink
-                        let event =
-                            screenshots::Event::UploadScreenshot(path, play.game.directory.clone());
+                        let mut destination = self.current_dir().unwrap();
+                        destination.set_file_name(self.now());
+                        destination.set_extension(
+                            path.extension()
+                                .unwrap_or_else(|| std::ffi::OsStr::new("png")),
+                        );
+
+                        info!("Moving screenshot {path:?} to {destination:?} for {play:?}");
+
+                        if let Err(e) = rename(&path, &destination).await {
+                            error!("Could not move screenshot {path:?} to {destination:?}: {e:?}");
+                            continue;
+                        }
+
+                        let event = screenshots::Event::UploadScreenshot(
+                            destination,
+                            play.game.directory.clone(),
+                        );
                         if let Err(e) = self.screenshots_tx.send(event) {
                             error!("Could not send to screenshots: {e:?}");
                         }
                     } else {
-                        error!("Screenshot {path:?} created but no current playing!");
+                        let mut destination = extra_directory.clone();
+                        destination.set_file_name(path.file_name().unwrap());
+                        error!("Dropping screenshot {path:?} to {destination:?} because no current playing!");
+                        if let Err(e) = rename(&path, &destination).await {
+                            error!("Could not move screenshot {path:?} to {destination:?}: {e:?}");
+                            continue;
+                        }
                     }
                 }
                 Event::SaveFileCreated(path) => {}
@@ -274,6 +301,12 @@ impl Orchestrator {
         self.current_play.as_ref().or(self.previous_play.as_ref())
     }
 
+    fn current_dir(&self) -> Option<PathBuf> {
+        self.current_play
+            .as_ref()
+            .map(|p| self.hold_screenshots.join(&p.game.directory))
+    }
+
     fn set_current_play(&mut self, play: Option<Play>) {
         let current = self.current_play.take();
         if current.is_some() {
@@ -296,5 +329,13 @@ impl Orchestrator {
             },
             None => Some(&path),
         }
+    }
+
+    fn now(&self) -> String {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            .to_string()
     }
 }
