@@ -1,6 +1,6 @@
 use anyhow::Result;
 use log::{error, info};
-use reqwest::{multipart, Body};
+use reqwest::Body;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs::{remove_file, File};
@@ -59,14 +59,29 @@ impl Screenshots {
 
     async fn upload_path_to_directory(&self, path: &Path, directory: String) -> () {
         let url = format!("{}/{directory}", self.screenshot_url);
+        let extension = path
+            .extension()
+            .and_then(std::ffi::OsStr::to_str)
+            .unwrap_or("png");
+        let content_type = if extension == "jpg" {
+            "image/jpeg"
+        } else {
+            "image/png"
+        };
+
         loop {
             match File::open(path).await {
                 Ok(file) => {
                     let stream = FramedRead::new(file, BytesCodec::new());
-                    let file_body = Body::wrap_stream(stream);
-                    let part = multipart::Part::stream(file_body);
-                    let form = multipart::Form::new().part("screenshot", part);
-                    match self.agent().post(&url).multipart(form).send().await {
+                    let body = Body::wrap_stream(stream);
+                    match self
+                        .agent()
+                        .post(&url)
+                        .header(reqwest::header::CONTENT_TYPE, content_type)
+                        .body(body)
+                        .send()
+                        .await
+                    {
                         Ok(res) => {
                             if res.status().is_success() {
                                 match res.text().await {
