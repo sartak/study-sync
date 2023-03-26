@@ -1,4 +1,4 @@
-use crate::game::{Game, Play};
+use crate::game::{Game, Language, Play};
 use crate::intake;
 use anyhow::Result;
 use futures::future::try_join_all;
@@ -327,5 +327,16 @@ impl Database {
                 Ok(())
             })
             .await
+    }
+}
+
+impl rusqlite::types::FromSql for Language {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        value.as_str().map(|v| match v {
+            "en" => Language::English,
+            "ja" => Language::Japanese,
+            "can" => Language::Cantonese,
+            _ => Language::Other(v.to_owned()),
+        })
     }
 }

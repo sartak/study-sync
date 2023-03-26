@@ -28,14 +28,3 @@ pub struct Play {
     pub submitted_end: Option<u64>,
     pub skipped: bool,
 }
-
-impl rusqlite::types::FromSql for Language {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        value.as_str().map(|v| match v {
-            "en" => Language::English,
-            "ja" => Language::Japanese,
-            "can" => Language::Cantonese,
-            _ => Language::Other(v.to_owned()),
-        })
-    }
-}
