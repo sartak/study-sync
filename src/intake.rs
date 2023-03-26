@@ -30,8 +30,9 @@ pub enum Event {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct IntakeResponse {
-    message: String,
-    object: IntakeResponseObject,
+    message: Option<String>,
+    error: Option<String>,
+    object: Option<IntakeResponseObject>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -190,11 +191,20 @@ impl Intake {
             match self.agent().post(url).json(&request).send().await {
                 Ok(res) => match res.json().await {
                     Ok(IntakeResponse {
-                        message,
-                        object: IntakeResponseObject { rowid },
+                        error: Some(error), ..
+                    }) => {
+                        error!("Error POSTing {url:?} from server: {error}")
+                    }
+                    Ok(IntakeResponse {
+                        message: Some(message),
+                        object: Some(IntakeResponseObject { rowid }),
+                        ..
                     }) => {
                         info!("Success POSTing {url:?}: {message}");
                         break (rowid, submitted);
+                    }
+                    Ok(res) => {
+                        error!("Error pattern-matching POST {url:?} response: {res:?}")
                     }
                     Err(e) => {
                         error!("Error decoding POST {url:?} response as JSON: {e:?}")
@@ -233,9 +243,20 @@ impl Intake {
 
             match self.agent().patch(url).json(&request).send().await {
                 Ok(res) => match res.json().await {
-                    Ok(IntakeResponse { message, .. }) => {
+                    Ok(IntakeResponse {
+                        error: Some(error), ..
+                    }) => {
+                        error!("Error PATCHing {url:?} from server: {error}")
+                    }
+                    Ok(IntakeResponse {
+                        message: Some(message),
+                        ..
+                    }) => {
                         info!("Success PATCHing {url:?}: {message}");
                         break submitted;
+                    }
+                    Ok(res) => {
+                        error!("Error pattern-matching PATCH {url:?} response: {res:?}")
                     }
                     Err(e) => {
                         error!("Error decoding PATCH {url:?} response as JSON: {e:?}")
