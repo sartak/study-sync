@@ -197,17 +197,46 @@ impl Orchestrator {
                     play_id,
                     intake_id,
                     submitted_start,
-                } => {}
+                } => {
+                    if let Err(e) = self
+                        .database
+                        .intake_update(play_id, Some(intake_id), Some(submitted_start), None)
+                        .await
+                    {
+                        error!("Could not update intake: {e:?}")
+                    }
+                }
                 Event::IntakeEnded {
                     play_id,
                     submitted_end,
-                } => {}
+                } => {
+                    if let Err(e) = self
+                        .database
+                        .intake_update(play_id, None, None, Some(submitted_end))
+                        .await
+                    {
+                        error!("Could not update intake: {e:?}")
+                    }
+                }
                 Event::IntakeFull {
                     play_id,
                     intake_id,
                     submitted_start,
                     submitted_end,
-                } => {}
+                } => {
+                    if let Err(e) = self
+                        .database
+                        .intake_update(
+                            play_id,
+                            Some(intake_id),
+                            Some(submitted_start),
+                            Some(submitted_end),
+                        )
+                        .await
+                    {
+                        error!("Could not update intake: {e:?}")
+                    }
+                }
                 Event::StartShutdown => {}
             }
         }
