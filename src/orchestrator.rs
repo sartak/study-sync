@@ -1,4 +1,4 @@
-use crate::{database::Database, game::Play, intake, screenshots};
+use crate::{database::Database, intake, screenshots};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::path::{Path, PathBuf};
@@ -6,6 +6,35 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs::{create_dir_all, hard_link, remove_file, rename};
 use tokio::join;
 use tokio::sync::mpsc;
+
+#[derive(Debug, Clone)]
+pub enum Language {
+    English,
+    Japanese,
+    Cantonese,
+    Other(String),
+}
+
+#[derive(Debug)]
+pub struct Game {
+    pub id: i64,
+    pub path: PathBuf,
+    pub directory: String,
+    pub language: Language,
+    pub label: String,
+}
+
+#[derive(Debug)]
+pub struct Play {
+    pub id: i64,
+    pub game: Game,
+    pub start_time: u64,
+    pub end_time: Option<u64>,
+    pub intake_id: Option<String>,
+    pub submitted_start: Option<u64>,
+    pub submitted_end: Option<u64>,
+    pub skipped: bool,
+}
 
 #[derive(Debug)]
 pub enum Event {
