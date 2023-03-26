@@ -66,6 +66,24 @@ impl OrchestratorPre {
             ));
         }
 
+        for entry in walkdir::WalkDir::new(&hold_screenshots)
+            .sort_by_file_name()
+            .min_depth(3)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            let path = entry.into_path();
+            let mut directory = path.clone();
+            directory.pop();
+            let directory = directory.strip_prefix(&hold_screenshots)?;
+            info!("Found batched screenshot {path:?} for {directory:?}");
+            if let Some(directory) = directory.to_str() {
+                let event = screenshots::Event::UploadScreenshot(path, directory.to_owned());
+                screenshots_tx.send(event)?;
+            }
+        }
+
         let (previous, backlog) = join!(
             database.load_previously_playing(),
             database.load_intake_backlog(),
