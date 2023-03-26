@@ -1140,6 +1140,7 @@ dependencies = [
  "tokio",
  "tokio-rusqlite",
  "tokio-util",
+ "walkdir",
 ]
 
 [[package]]
