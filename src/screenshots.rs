@@ -110,19 +110,24 @@ impl Screenshots {
                             if res.status().is_success() {
                                 match res.text().await {
                                     Ok(message) => {
-                                        info!("Successfully uploaded {path:?} to {directory:?}: {message}");
+                                        info!(
+                                            "Successfully uploaded {path:?} to {url:?}: {message}"
+                                        );
                                         break;
                                     }
                                     Err(e) => {
-                                        error!("Failed to parse upload response for {path:?} into text: {e:?}");
+                                        error!("Failed to parse upload response for {path:?} using {url:?} into text: {e:?}");
                                     }
                                 }
                             } else {
-                                error!("Failed to upload {path:?} for {directory:?}: got status code {}", res.status());
+                                error!(
+                                    "Failed to upload {path:?} using {url:?}: got status code {}",
+                                    res.status()
+                                );
                             }
                         }
                         Err(e) => {
-                            error!("Failed to upload {path:?} for {directory:?}: {e:?}");
+                            error!("Failed to upload {path:?} using {url:?}: {e:?}");
                         }
                     }
                 }
