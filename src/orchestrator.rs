@@ -120,6 +120,19 @@ impl Orchestrator {
 
                     info!("Play begin {play:?}");
                     self.set_current_play(Some(play));
+
+                    if let Some(play) = &self.current_play {
+                        let game = &play.game;
+                        let event = intake::Event::SubmitStarted {
+                            play_id: play.id,
+                            game_label: game.label.clone(),
+                            language: game.language.clone(),
+                            start_time: play.start_time,
+                        };
+                        if let Err(e) = self.intake_tx.send(event) {
+                            error!("Could not send to intake: {e:?}");
+                        }
+                    }
                 }
                 Event::GameEnded(path) => {
                     let path = match self.fixed_path(&path) {
@@ -133,6 +146,19 @@ impl Orchestrator {
                         } else {
                             self.current_play = Some(self.database.finished_playing(play).await?);
                             info!("Play ended {:?}", self.current_play);
+                            if let Some(play) = &self.current_play {
+                                let game = &play.game;
+                                let event = intake::Event::SubmitFull {
+                                    play_id: play.id,
+                                    game_label: game.label.clone(),
+                                    language: game.language.clone(),
+                                    start_time: play.start_time,
+                                    end_time: play.end_time.unwrap(),
+                                };
+                                if let Err(e) = self.intake_tx.send(event) {
+                                    error!("Could not send to intake: {e:?}");
+                                }
+                            }
                         }
                     } else {
                         error!("No previous game!");
