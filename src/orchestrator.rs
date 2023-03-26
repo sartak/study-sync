@@ -82,9 +82,6 @@ impl Orchestrator {
 
                     info!("Play begin {play:?}");
                     self.set_current_play(Some(play));
-                    self.database
-                        .save_currently_playing(self.current_play.as_ref().map(|p| p.id))
-                        .await?;
                 }
                 Event::GameEnded(path) => {
                     let path = match self.fixed_path(&path) {
@@ -104,7 +101,6 @@ impl Orchestrator {
                     }
 
                     self.set_current_play(None);
-                    self.database.save_currently_playing(None).await?;
                 }
                 Event::ScreenshotCreated(path) => {
                     let play = match self.playing() {
@@ -134,6 +130,9 @@ impl Orchestrator {
             self.previous_play = current;
         }
         self.current_play = play;
+
+        self.database
+            .detach_save_currently_playing(self.current_play.as_ref().map(|p| p.id))
     }
 
     fn fixed_path<'p>(&self, path: &'p Path) -> Option<&'p Path> {

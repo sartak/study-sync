@@ -1,6 +1,6 @@
 use crate::game::{Game, Play};
 use anyhow::Result;
-use log::info;
+use log::{error, info};
 use rusqlite::{params, OptionalExtension};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -31,6 +31,17 @@ where
         plays_dbh,
         games_dbh,
     })
+}
+
+async fn save_currently_playing(dbh: Connection, id: Option<i64>) -> Result<()> {
+    dbh.call(move |conn| {
+        conn.execute("DELETE FROM current", params![])?;
+        if let Some(id) = id {
+            conn.execute("INSERT INTO current (play) VALUES (?)", params![id])?;
+        }
+        Ok(())
+    })
+    .await
 }
 
 impl Database {
@@ -103,16 +114,13 @@ impl Database {
             .await
     }
 
-    pub async fn save_currently_playing(self: &Self, id: Option<i64>) -> Result<()> {
-        self.plays_dbh
-            .call(move |conn| {
-                conn.execute("DELETE FROM current", params![])?;
-                if let Some(id) = id {
-                    conn.execute("INSERT INTO current (play) VALUES (?)", params![id])?;
-                }
-                Ok(())
-            })
-            .await
+    pub fn detach_save_currently_playing(self: &Self, id: Option<i64>) {
+        let db = self.plays_dbh.clone();
+        tokio::spawn(async move {
+            if let Err(e) = save_currently_playing(db, id).await {
+                error!("Error saving currently playing: {e:?}")
+            }
+        });
     }
 
     pub async fn load_previously_playing(self: &Self) -> Result<Option<Play>> {
