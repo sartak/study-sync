@@ -1,5 +1,4 @@
-use crate::game::Play;
-use crate::{database::Database, intake};
+use crate::{database::Database, game::Play, intake, screenshots};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::path::{Path, PathBuf};
@@ -37,6 +36,7 @@ pub struct OrchestratorPre {
 pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
     intake_tx: mpsc::UnboundedSender<intake::Event>,
+    screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
     hold_screenshots: PathBuf,
     trim_game_prefix: Option<String>,
     database: Database,
@@ -56,6 +56,7 @@ impl OrchestratorPre {
         hold_screenshots: PathBuf,
         trim_game_prefix: Option<String>,
         intake_tx: mpsc::UnboundedSender<intake::Event>,
+        screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
     ) -> Result<()> {
         if !hold_screenshots.is_dir() {
             return Err(anyhow!(
@@ -100,6 +101,7 @@ impl OrchestratorPre {
         let orchestrator = Orchestrator {
             rx: self.rx,
             intake_tx,
+            screenshots_tx,
             hold_screenshots,
             trim_game_prefix,
             database,
@@ -192,15 +194,18 @@ impl Orchestrator {
                     self.set_current_play(None);
                 }
                 Event::ScreenshotCreated(path) => {
-                    let play = match self.playing() {
-                        Some(p) => p,
-                        None => {
-                            error!("Screenshot {path:?} created but no current playing!");
-                            todo!("move screenshot into {extra_directory:?}");
+                    if let Some(play) = self.playing() {
+                        info!("Got screenshot {path:?} for {play:?}");
+                        // todo move
+                        // todo hardlink
+                        let event =
+                            screenshots::Event::UploadScreenshot(path, play.game.directory.clone());
+                        if let Err(e) = self.screenshots_tx.send(event) {
+                            error!("Could not send to screenshots: {e:?}");
                         }
-                    };
-
-                    info!("Got screenshot {path:?} for {play:?}");
+                    } else {
+                        error!("Screenshot {path:?} created but no current playing!");
+                    }
                 }
                 Event::SaveFileCreated(path) => {}
                 Event::IntakeStarted {
