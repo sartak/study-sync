@@ -226,6 +226,15 @@ impl Orchestrator {
                             continue;
                         }
 
+                        if let Err(e) = remove_file(&latest_screenshot).await {
+                            if e.kind() != std::io::ErrorKind::NotFound {
+                                error!(
+                                "Could not remove latest screenshot {latest_screenshot:?}: {e:?}"
+                            );
+                                continue;
+                            }
+                        }
+
                         if let Err(e) = hard_link(&destination, &latest_screenshot).await {
                             error!("Could not hardlink screenshot {path:?} to {latest_screenshot:?}: {e:?}");
                             continue;
