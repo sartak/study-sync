@@ -1,7 +1,9 @@
 use crate::{game::Language, orchestrator};
 use anyhow::Result;
-use log::{error, info};
+use log::{error, info, warn};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
@@ -24,6 +26,17 @@ pub enum Event {
         start_time: u64,
         end_time: u64,
     },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct IntakeResponse {
+    message: String,
+    object: IntakeResponseObject,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct IntakeResponseObject {
+    rowid: u64,
 }
 
 pub struct IntakePre {
@@ -136,6 +149,11 @@ impl Intake {
         Ok(())
     }
 
+    fn agent(&self) -> reqwest::Client {
+        let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(10));
+        builder.build().unwrap()
+    }
+
     async fn create_intake(
         &self,
         game_label: String,
@@ -143,15 +161,108 @@ impl Intake {
         start_time: u64,
         end_time: Option<u64>,
     ) -> (u64, u64) {
-        let intake_id = 0;
-        let submitted = 0;
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Request {
+            #[serde(rename = "startTime")]
+            start_time: u64,
+            #[serde(rename = "endTime")]
+            end_time: Option<u64>,
+            #[serde(rename = "game")]
+            game_label: String,
+            language: String,
+        }
 
-        (intake_id, submitted)
+        let url = &self.intake_url;
+
+        let request = Request {
+            start_time,
+            end_time,
+            game_label,
+            language: language.intake_str(),
+        };
+
+        loop {
+            let submitted = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            match self.agent().post(url).json(&request).send().await {
+                Ok(res) => match res.json().await {
+                    Ok(IntakeResponse {
+                        message,
+                        object: IntakeResponseObject { rowid },
+                    }) => {
+                        info!("Success POSTing {url:?}: {message}");
+                        break (rowid, submitted);
+                    }
+                    Err(e) => {
+                        error!("Error decoding POST {url:?} response as JSON: {e:?}")
+                    }
+                },
+                Err(e) => {
+                    error!("Error POSTing {url:?} with {request:?}: {e:?}");
+                }
+            }
+
+            info!("Sleeping for 5s before trying again");
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        }
     }
 
     async fn finish_intake(&self, intake_id: u64, end_time: u64) -> u64 {
-        let submitted = 0;
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Request {
+            rowid: u64,
+            #[serde(rename = "endTime")]
+            end_time: u64,
+        }
 
-        submitted
+        let url = &self.intake_url;
+
+        let request = Request {
+            rowid: intake_id,
+            end_time,
+        };
+
+        loop {
+            let submitted = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            match self.agent().patch(url).json(&request).send().await {
+                Ok(res) => match res.json().await {
+                    Ok(IntakeResponse { message, .. }) => {
+                        info!("Success PATCHing {url:?}: {message}");
+                        break submitted;
+                    }
+                    Err(e) => {
+                        error!("Error decoding PATCH {url:?} response as JSON: {e:?}")
+                    }
+                },
+                Err(e) => {
+                    error!("Error PATCHing {url:?} with {request:?}: {e:?}");
+                }
+            }
+
+            info!("Sleeping for 5s before trying again");
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        }
+    }
+}
+
+impl Language {
+    fn intake_str(&self) -> String {
+        let lang = match self {
+            Language::English => "English",
+            Language::Japanese => "日本語",
+            Language::Cantonese => "廣東話",
+            Language::Other(lang) => {
+                warn!("Mapping intake language {lang} to English");
+                "English"
+            }
+        };
+        lang.to_string()
     }
 }
