@@ -12,6 +12,21 @@ pub enum Event {
     GameEnded(PathBuf),
     ScreenshotCreated(PathBuf),
     SaveFileCreated(PathBuf),
+    IntakeStarted {
+        play_id: i64,
+        intake_id: u64,
+        submitted_start: u64,
+    },
+    IntakeEnded {
+        play_id: i64,
+        submitted_end: u64,
+    },
+    IntakeFull {
+        play_id: i64,
+        intake_id: u64,
+        submitted_start: u64,
+        submitted_end: u64,
+    },
     StartShutdown,
 }
 
@@ -178,6 +193,21 @@ impl Orchestrator {
                     info!("Got screenshot {path:?} for {play:?}");
                 }
                 Event::SaveFileCreated(path) => {}
+                Event::IntakeStarted {
+                    play_id,
+                    intake_id,
+                    submitted_start,
+                } => {}
+                Event::IntakeEnded {
+                    play_id,
+                    submitted_end,
+                } => {}
+                Event::IntakeFull {
+                    play_id,
+                    intake_id,
+                    submitted_start,
+                    submitted_end,
+                } => {}
                 Event::StartShutdown => {}
             }
         }

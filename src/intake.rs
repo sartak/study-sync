@@ -1,6 +1,6 @@
-use crate::game::Language;
+use crate::{game::Language, orchestrator};
 use anyhow::Result;
-use log::info;
+use log::{error, info};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
@@ -32,6 +32,7 @@ pub struct IntakePre {
 
 pub struct Intake {
     rx: mpsc::UnboundedReceiver<Event>,
+    orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
     play_to_intake: HashMap<i64, u64>,
 }
 
@@ -41,9 +42,13 @@ pub fn launch() -> (IntakePre, mpsc::UnboundedSender<Event>) {
 }
 
 impl IntakePre {
-    pub async fn start(self) -> Result<()> {
+    pub async fn start(
+        self,
+        orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
+    ) -> Result<()> {
         let intake = Intake {
             rx: self.rx,
+            orchestrator_tx,
             play_to_intake: HashMap::new(),
         };
         intake.start().await
@@ -65,13 +70,32 @@ impl Intake {
                         .create_intake(game_label, language, start_time, None)
                         .await;
                     self.play_to_intake.insert(play_id, intake_id);
+                    let event = orchestrator::Event::IntakeStarted {
+                        play_id,
+                        intake_id,
+                        submitted_start,
+                    };
+                    if let Err(e) = self.orchestrator_tx.send(event) {
+                        error!("Could not send to orchestrator: {e:?}");
+                        continue;
+                    }
                 }
                 Event::SubmitEnded {
                     play_id,
                     intake_id,
                     end_time,
                 } => {
+                    self.play_to_intake.remove(&play_id);
+
                     let submitted_end = self.finish_intake(intake_id, end_time).await;
+                    let event = orchestrator::Event::IntakeEnded {
+                        play_id,
+                        submitted_end,
+                    };
+                    if let Err(e) = self.orchestrator_tx.send(event) {
+                        error!("Could not send to orchestrator: {e:?}");
+                        continue;
+                    }
                 }
                 Event::SubmitFull {
                     play_id,
@@ -83,10 +107,25 @@ impl Intake {
                     let event;
                     if let Some(intake_id) = self.play_to_intake.remove(&play_id) {
                         let submitted_end = self.finish_intake(intake_id, end_time).await;
+                        event = orchestrator::Event::IntakeEnded {
+                            play_id,
+                            submitted_end,
+                        };
                     } else {
                         let (intake_id, submitted_start) = self
                             .create_intake(game_label, language, start_time, Some(end_time))
                             .await;
+                        event = orchestrator::Event::IntakeFull {
+                            play_id,
+                            intake_id,
+                            submitted_start,
+                            submitted_end: submitted_start,
+                        };
+                    }
+
+                    if let Err(e) = self.orchestrator_tx.send(event) {
+                        error!("Could not send to orchestrator: {e:?}");
+                        continue;
                     }
                 }
             }

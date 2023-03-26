@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
 
     let orchestrator =
         orchestrator.start(dbh, args.hold_screenshots, args.trim_game_prefix, intake_tx);
-    let intake = intake.start();
+    let intake = intake.start(orchestrator_tx.clone());
 
     select! {
         res = server => { res }
