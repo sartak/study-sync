@@ -44,10 +44,9 @@ async fn main() -> Result<()> {
     let listen = args.listen.parse()?;
     let dbh = database::connect(args.plays_database, args.games_database).await?;
 
-    let (intake, intake_tx) = intake::launch().await?;
+    let (intake, intake_tx) = intake::launch();
 
-    let (orchestrator, orchestrator_tx) =
-        orchestrator::launch(dbh, args.hold_screenshots, args.trim_game_prefix, intake_tx).await?;
+    let (orchestrator, orchestrator_tx) = orchestrator::launch();
 
     let server = server::launch(&listen, orchestrator_tx.clone());
 
@@ -57,7 +56,8 @@ async fn main() -> Result<()> {
         orchestrator_tx.clone(),
     );
 
-    let orchestrator = orchestrator.start();
+    let orchestrator =
+        orchestrator.start(dbh, args.hold_screenshots, args.trim_game_prefix, intake_tx);
     let intake = intake.start();
 
     select! {

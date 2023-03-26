@@ -4,16 +4,25 @@ use log::{error, info};
 use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
 
-pub enum Event {}
+
+pub struct IntakePre {
+    rx: mpsc::UnboundedReceiver<Event>,
+}
 
 pub struct Intake {
     rx: mpsc::UnboundedReceiver<Event>,
 }
 
-pub async fn launch() -> Result<(Intake, mpsc::UnboundedSender<Event>)> {
+pub fn launch() -> (IntakePre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
+    return (IntakePre { rx }, tx);
+}
 
-    return Ok((Intake { rx }, tx));
+impl IntakePre {
+    pub async fn start(self) -> Result<()> {
+        let intake = Intake { rx: self.rx };
+        intake.start().await
+    }
 }
 
 impl Intake {

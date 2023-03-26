@@ -14,6 +14,10 @@ pub enum Event {
     StartShutdown,
 }
 
+pub struct OrchestratorPre {
+    rx: mpsc::UnboundedReceiver<Event>,
+}
+
 pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
     intake_tx: mpsc::UnboundedSender<intake::Event>,
@@ -24,38 +28,42 @@ pub struct Orchestrator {
     previous_play: Option<Play>,
 }
 
-pub async fn launch(
-    database: Database,
-    hold_screenshots: PathBuf,
-    trim_game_prefix: Option<String>,
-    intake_tx: mpsc::UnboundedSender<intake::Event>,
-) -> Result<(Orchestrator, mpsc::UnboundedSender<Event>)> {
+pub fn launch() -> (OrchestratorPre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
+    return (OrchestratorPre { rx }, tx);
+}
 
-    if !hold_screenshots.is_dir() {
-        return Err(anyhow!(
-            "hold-screenshots {hold_screenshots:?} not a directory"
-        ));
-    }
+impl OrchestratorPre {
+    pub async fn start(
+        self,
+        database: Database,
+        hold_screenshots: PathBuf,
+        trim_game_prefix: Option<String>,
+        intake_tx: mpsc::UnboundedSender<intake::Event>,
+    ) -> Result<()> {
+        if !hold_screenshots.is_dir() {
+            return Err(anyhow!(
+                "hold-screenshots {hold_screenshots:?} not a directory"
+            ));
+        }
 
-    let previous = database.load_previously_playing().await?;
-    match &previous {
-        Some(p) => info!("Found previously-playing game {p:?}"),
-        None => info!("No previously-playing game found"),
-    };
+        let previous = database.load_previously_playing().await?;
+        match &previous {
+            Some(p) => info!("Found previously-playing game {p:?}"),
+            None => info!("No previously-playing game found"),
+        };
 
-    return Ok((
-        Orchestrator {
-            rx,
+        let orchestrator = Orchestrator {
+            rx: self.rx,
             intake_tx,
             hold_screenshots,
             trim_game_prefix,
             database,
             current_play: previous,
             previous_play: None,
-        },
-        tx,
-    ));
+        };
+        orchestrator.start().await
+    }
 }
 
 impl Orchestrator {
