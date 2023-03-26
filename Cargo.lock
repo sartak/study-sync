@@ -1081,6 +1081,7 @@ dependencies = [
  "serde",
  "tokio",
  "tokio-rusqlite",
+ "tokio-util",
 ]
 
 [[package]]
