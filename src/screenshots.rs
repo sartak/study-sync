@@ -14,6 +14,7 @@ pub struct ScreenshotsPre {
 
 pub struct Screenshots {
     rx: mpsc::UnboundedReceiver<Event>,
+    screenshot_url: String,
 }
 
 pub fn launch() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
@@ -22,8 +23,11 @@ pub fn launch() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
 }
 
 impl ScreenshotsPre {
-    pub async fn start(self) -> Result<()> {
-        let screenshots = Screenshots { rx: self.rx };
+    pub async fn start(self, screenshot_url: String) -> Result<()> {
+        let screenshots = Screenshots {
+            rx: self.rx,
+            screenshot_url,
+        };
         screenshots.start().await
     }
 }
