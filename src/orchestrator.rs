@@ -14,7 +14,7 @@ pub enum Event {
     SaveFileCreated(PathBuf),
     IntakeStarted {
         play_id: i64,
-        intake_id: u64,
+        intake_id: String,
         submitted_start: u64,
     },
     IntakeEnded {
@@ -23,7 +23,7 @@ pub enum Event {
     },
     IntakeFull {
         play_id: i64,
-        intake_id: u64,
+        intake_id: String,
         submitted_start: u64,
         submitted_end: u64,
     },
@@ -200,7 +200,7 @@ impl Orchestrator {
                 } => {
                     if let Err(e) = self
                         .database
-                        .intake_update(play_id, Some(intake_id), Some(submitted_start), None)
+                        .initial_intake(play_id, intake_id, submitted_start)
                         .await
                     {
                         error!("Could not update intake: {e:?}")
@@ -210,11 +210,7 @@ impl Orchestrator {
                     play_id,
                     submitted_end,
                 } => {
-                    if let Err(e) = self
-                        .database
-                        .intake_update(play_id, None, None, Some(submitted_end))
-                        .await
-                    {
+                    if let Err(e) = self.database.final_intake(play_id, submitted_end).await {
                         error!("Could not update intake: {e:?}")
                     }
                 }
@@ -226,12 +222,7 @@ impl Orchestrator {
                 } => {
                     if let Err(e) = self
                         .database
-                        .intake_update(
-                            play_id,
-                            Some(intake_id),
-                            Some(submitted_start),
-                            Some(submitted_end),
-                        )
+                        .full_intake(play_id, intake_id, submitted_start, submitted_end)
                         .await
                     {
                         error!("Could not update intake: {e:?}")

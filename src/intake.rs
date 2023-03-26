@@ -16,7 +16,7 @@ pub enum Event {
     },
     SubmitEnded {
         play_id: i64,
-        intake_id: u64,
+        intake_id: String,
         end_time: u64,
     },
     SubmitFull {
@@ -37,7 +37,7 @@ struct IntakeResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct IntakeResponseObject {
-    rowid: u64,
+    rowid: String,
 }
 
 pub struct IntakePre {
@@ -48,7 +48,7 @@ pub struct Intake {
     rx: mpsc::UnboundedReceiver<Event>,
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
     intake_url: String,
-    play_to_intake: HashMap<i64, u64>,
+    play_to_intake: HashMap<i64, String>,
 }
 
 pub fn launch() -> (IntakePre, mpsc::UnboundedSender<Event>) {
@@ -86,7 +86,7 @@ impl Intake {
                     let (intake_id, submitted_start) = self
                         .create_intake(game_label, language, start_time, None)
                         .await;
-                    self.play_to_intake.insert(play_id, intake_id);
+                    self.play_to_intake.insert(play_id, intake_id.clone());
                     let event = orchestrator::Event::IntakeStarted {
                         play_id,
                         intake_id,
@@ -161,7 +161,7 @@ impl Intake {
         language: Language,
         start_time: u64,
         end_time: Option<u64>,
-    ) -> (u64, u64) {
+    ) -> (String, u64) {
         #[derive(Debug, Serialize, Deserialize)]
         struct Request {
             #[serde(rename = "startTime")]
@@ -220,10 +220,10 @@ impl Intake {
         }
     }
 
-    async fn finish_intake(&self, intake_id: u64, end_time: u64) -> u64 {
+    async fn finish_intake(&self, intake_id: String, end_time: u64) -> u64 {
         #[derive(Debug, Serialize, Deserialize)]
         struct Request {
-            rowid: u64,
+            rowid: String,
             #[serde(rename = "endTime")]
             end_time: u64,
         }

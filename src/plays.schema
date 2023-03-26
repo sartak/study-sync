@@ -3,7 +3,7 @@ CREATE TABLE
     game TEXT NOT NULL,
     start_time INTEGER NOT NULL,
     end_time INTEGER,
-    intake_id INTEGER,
+    intake_id TEXT,
     submitted_start INTEGER,
     submitted_end INTEGER,
     skipped BOOLEAN DEFAULT 0
