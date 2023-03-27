@@ -230,6 +230,7 @@ impl Orchestrator {
                         error!("Could not create {dir:?}: {e:?}");
                     }
                 }
+
                 Event::GameEnded(path) => {
                     let path = match self.fixed_path(&path) {
                         Some(p) => p,
@@ -262,6 +263,7 @@ impl Orchestrator {
 
                     self.set_current_play(None);
                 }
+
                 Event::ScreenshotCreated(path) => {
                     if let Some(play) = self.playing() {
                         let mut destination = self.current_dir().unwrap();
@@ -312,7 +314,9 @@ impl Orchestrator {
                         }
                     }
                 }
+
                 Event::SaveFileCreated(path) => {}
+
                 Event::IntakeStarted {
                     play_id,
                     intake_id,
@@ -333,6 +337,7 @@ impl Orchestrator {
                         error!("Could not update intake: {e:?}")
                     }
                 }
+
                 Event::IntakeEnded {
                     play_id,
                     submitted_end,
@@ -347,6 +352,7 @@ impl Orchestrator {
                         error!("Could not update intake: {e:?}")
                     }
                 }
+
                 Event::IntakeFull {
                     play_id,
                     intake_id,
@@ -369,6 +375,7 @@ impl Orchestrator {
                         error!("Could not update intake: {e:?}")
                     }
                 }
+
                 Event::StartShutdown => {}
             }
         }

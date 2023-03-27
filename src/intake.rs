@@ -84,6 +84,7 @@ impl Intake {
                 Event::PreviousGame { play_id, intake_id } => {
                     self.play_to_intake.insert(play_id, intake_id);
                 }
+
                 Event::SubmitStarted {
                     play_id,
                     game_label,
@@ -104,6 +105,7 @@ impl Intake {
                         continue;
                     }
                 }
+
                 Event::SubmitEnded {
                     play_id,
                     intake_id,
@@ -121,6 +123,7 @@ impl Intake {
                         continue;
                     }
                 }
+
                 Event::SubmitFull {
                     play_id,
                     game_label,
