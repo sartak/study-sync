@@ -174,7 +174,17 @@ impl Orchestrator {
                         error!("Already have a current play! {previous_play:?}");
                     }
 
-                    if let Err(e) = remove_file(&latest_screenshot).await {
+                    let path = match self.fixed_path(&path) {
+                        Some(p) => p,
+                        None => continue,
+                    };
+
+                    let (remove_res, game_res) = join!(
+                        remove_file(&latest_screenshot),
+                        self.database.game_for_path(&path),
+                    );
+
+                    if let Err(e) = remove_res {
                         if e.kind() != std::io::ErrorKind::NotFound {
                             error!(
                                 "Could not remove latest screenshot {latest_screenshot:?}: {e:?}"
@@ -183,11 +193,7 @@ impl Orchestrator {
                         }
                     }
 
-                    let path = match self.fixed_path(&path) {
-                        Some(p) => p,
-                        None => continue,
-                    };
-                    let game = match self.database.game_for_path(&path).await {
+                    let game = match game_res {
                         Ok(game) => game,
                         Err(e) => {
                             error!("Could not find game for path {path:?}: {e:?}");
@@ -219,10 +225,9 @@ impl Orchestrator {
                         }
                     }
 
-                    if let Some(dir) = self.current_dir() {
-                        if let Err(e) = create_dir_all(&dir).await {
-                            error!("Could not create {dir:?}: {e:?}");
-                        }
+                    let dir = self.current_dir().unwrap();
+                    if let Err(e) = create_dir_all(&dir).await {
+                        error!("Could not create {dir:?}: {e:?}");
                     }
                 }
                 Event::GameEnded(path) => {
@@ -268,12 +273,15 @@ impl Orchestrator {
 
                         info!("Moving screenshot {path:?} to {destination:?} for {play:?}");
 
-                        if let Err(e) = rename(&path, &destination).await {
+                        let (rename_res, remove_res) =
+                            join!(rename(&path, &destination), remove_file(&latest_screenshot));
+
+                        if let Err(e) = rename_res {
                             error!("Could not move screenshot {path:?} to {destination:?}: {e:?}");
                             continue;
                         }
 
-                        if let Err(e) = remove_file(&latest_screenshot).await {
+                        if let Err(e) = remove_res {
                             if e.kind() != std::io::ErrorKind::NotFound {
                                 error!(
                                 "Could not remove latest screenshot {latest_screenshot:?}: {e:?}"
