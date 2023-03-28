@@ -12,6 +12,7 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 pub enum Event {
     UploadScreenshot(PathBuf, String),
     UploadExtra(PathBuf),
+    StartShutdown,
 }
 
 pub struct ScreenshotsPre {
@@ -59,6 +60,8 @@ impl Screenshots {
                         error!("Could not remove extra screenshot file {path:?}: {e:?}");
                     }
                 }
+
+                Event::StartShutdown => return Ok(()),
             }
         }
         Ok(())

@@ -30,6 +30,7 @@ pub enum Event {
         start_time: u64,
         end_time: u64,
     },
+    StartShutdown,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,6 +156,8 @@ impl Intake {
                         continue;
                     }
                 }
+
+                Event::StartShutdown => return Ok(()),
             }
         }
         Ok(())

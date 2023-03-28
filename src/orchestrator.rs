@@ -438,7 +438,15 @@ impl Orchestrator {
                     }
                 }
 
-                Event::StartShutdown => {}
+                Event::StartShutdown => {
+                    if let Err(e) = self.intake_tx.send(intake::Event::StartShutdown) {
+                        error!("Could not send to intake: {e:?}");
+                    }
+                    if let Err(e) = self.screenshots_tx.send(screenshots::Event::StartShutdown) {
+                        error!("Could not send to screenshots: {e:?}");
+                    }
+                    return Ok(());
+                }
             }
         }
         Ok(())
