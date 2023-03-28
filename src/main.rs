@@ -67,22 +67,23 @@ async fn main() -> Result<()> {
 
     let server = server::launch(&listen, orchestrator_tx.clone());
 
-    let watch = watch::launch(
-        args.watch_screenshots.clone(),
-        watch::WatchTarget::Screenshots,
-        orchestrator_tx.clone(),
-    );
+    let watch = watch::launch();
 
     let orchestrator = orchestrator.start(
         dbh,
         args.hold_screenshots,
-        args.watch_screenshots,
+        args.watch_screenshots.clone(),
         args.trim_game_prefix,
         intake_tx,
         screenshots_tx,
     );
     let intake = intake.start(orchestrator_tx.clone(), args.intake_url);
     let screenshots = screenshots.start(args.screenshot_url, args.extra_directory);
+    let watch = watch.start(
+        args.watch_screenshots,
+        watch::WatchTarget::Screenshots,
+        orchestrator_tx.clone(),
+    );
 
     // Would love to know a better way to do this
     let (server_res, watch_res, orchestrator_res, intake_res, screenshots_res) =
