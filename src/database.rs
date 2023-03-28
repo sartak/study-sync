@@ -49,7 +49,7 @@ async fn save_currently_playing(dbh: Connection, id: Option<i64>) -> Result<()> 
 }
 
 impl Database {
-    pub async fn game_for_path(self: &Self, path: &Path) -> Result<Game> {
+    pub async fn game_for_path(&self, path: &Path) -> Result<Game> {
         let path = PathBuf::from(path);
         self.games_dbh
             .call(|conn| {
@@ -71,7 +71,7 @@ impl Database {
             .await
     }
 
-    pub async fn started_playing(self: &Self, game: Game) -> Result<Play> {
+    pub async fn started_playing(&self, game: Game) -> Result<Play> {
         let start_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -98,7 +98,7 @@ impl Database {
             .await
     }
 
-    pub async fn finished_playing(self: &Self, play: Play) -> Result<Play> {
+    pub async fn finished_playing(&self, play: Play) -> Result<Play> {
         let end_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -118,7 +118,7 @@ impl Database {
             .await
     }
 
-    pub fn detach_save_currently_playing(self: &Self, id: Option<i64>) {
+    pub fn detach_save_currently_playing(&self, id: Option<i64>) {
         let db = self.plays_dbh.clone();
         tokio::spawn(async move {
             if let Err(e) = save_currently_playing(db, id).await {
@@ -127,7 +127,7 @@ impl Database {
         });
     }
 
-    pub async fn load_previously_playing(self: &Self) -> Result<Option<Play>> {
+    pub async fn load_previously_playing(&self) -> Result<Option<Play>> {
         struct Current {
             rowid: i64,
             game_path: String,
@@ -179,7 +179,7 @@ impl Database {
         }))
     }
 
-    pub async fn load_intake_backlog(self: &Self) -> Result<Vec<intake::Event>> {
+    pub async fn load_intake_backlog(&self) -> Result<Vec<intake::Event>> {
         struct PartialPlay {
             rowid: i64,
             game_path: String,
@@ -291,7 +291,7 @@ impl Database {
     }
 
     pub async fn initial_intake(
-        self: &Self,
+        &self,
         play_id: i64,
         intake_id: String,
         submitted_start: u64,
@@ -307,7 +307,7 @@ impl Database {
             .await
     }
 
-    pub async fn final_intake(self: &Self, play_id: i64, submitted_end: u64) -> Result<()> {
+    pub async fn final_intake(&self, play_id: i64, submitted_end: u64) -> Result<()> {
         self.plays_dbh
             .call(move |conn| {
                 conn.execute(
@@ -320,7 +320,7 @@ impl Database {
     }
 
     pub async fn full_intake(
-        self: &Self,
+        &self,
         play_id: i64,
         intake_id: String,
         submitted_start: u64,
