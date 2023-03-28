@@ -60,31 +60,30 @@ async fn main() -> Result<()> {
 
     let dbh = database::connect(args.plays_database, args.games_database).await?;
 
+    let (server, server_tx) = server::launch();
+    let (watch, watch_tx) = watch::launch();
+    let (orchestrator, orchestrator_tx) = orchestrator::launch();
     let (intake, intake_tx) = intake::launch();
     let (screenshots, screenshots_tx) = screenshots::launch();
 
-    let (orchestrator, orchestrator_tx) = orchestrator::launch();
-
-    let server = server::launch(&listen, orchestrator_tx.clone());
-
-    let (watch, watch_tx) = watch::launch();
-
+    let server = server.start(&listen, orchestrator_tx.clone());
+    let watch = watch.start(
+        args.watch_screenshots.clone(),
+        watch::WatchTarget::Screenshots,
+        orchestrator_tx.clone(),
+    );
     let orchestrator = orchestrator.start(
         dbh,
         args.hold_screenshots,
-        args.watch_screenshots.clone(),
+        args.watch_screenshots,
         args.trim_game_prefix,
         intake_tx,
         screenshots_tx,
         watch_tx,
+        server_tx,
     );
     let intake = intake.start(orchestrator_tx.clone(), args.intake_url);
     let screenshots = screenshots.start(args.screenshot_url, args.extra_directory);
-    let watch = watch.start(
-        args.watch_screenshots,
-        watch::WatchTarget::Screenshots,
-        orchestrator_tx.clone(),
-    );
 
     try_join!(server, watch, orchestrator, intake, screenshots).map(|_| ())
 }

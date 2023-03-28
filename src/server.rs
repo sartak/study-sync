@@ -9,22 +9,52 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::{fs::canonicalize, sync::mpsc};
 
-struct Server {
+#[derive(Debug)]
+pub enum Event {
+    StartShutdown,
+}
+
+pub struct ServerPre {
+    rx: mpsc::UnboundedReceiver<Event>,
+}
+
+pub struct Server {
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
 }
 
-pub async fn launch(
-    address: &std::net::SocketAddr,
-    orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
-) -> Result<()> {
-    let server = Server { orchestrator_tx };
+pub fn launch() -> (ServerPre, mpsc::UnboundedSender<Event>) {
+    let (tx, rx) = mpsc::unbounded_channel();
+    (ServerPre { rx }, tx)
+}
 
-    let listener = axum::Server::try_bind(address)
-        .with_context(|| format!("Failed to bind to {address}"))?
-        .serve(router(server).into_make_service());
-    info!("Listening on {address}");
-    listener.await?;
-    Ok(())
+impl ServerPre {
+    pub async fn start(
+        self,
+        address: &std::net::SocketAddr,
+        orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
+    ) -> Result<()> {
+        let server = Server { orchestrator_tx };
+
+        let listener = axum::Server::try_bind(address)
+            .with_context(|| format!("Failed to bind to {address}"))?
+            .serve(router(server).into_make_service())
+            .with_graceful_shutdown(handle_events(self.rx));
+        info!("Listening on {address}");
+        listener.await?;
+        Ok(())
+    }
+}
+
+async fn handle_events(mut rx: mpsc::UnboundedReceiver<Event>) {
+    #![allow(clippy::never_loop)]
+    while let Some(event) = rx.recv().await {
+        info!("Handling event {event:?}");
+        match event {
+            Event::StartShutdown => break,
+        }
+    }
+
+    info!("server gracefully shutting down");
 }
 
 fn router(server: Server) -> Router {
