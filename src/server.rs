@@ -1,4 +1,4 @@
-use crate::orchestrator::Event;
+use crate::orchestrator;
 use anyhow::{anyhow, Context, Result};
 use axum::{
     extract::Query, extract::State, http::StatusCode, response::IntoResponse, routing::get, Router,
@@ -6,25 +6,32 @@ use axum::{
 use log::{error, info};
 use serde::Deserialize;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::{fs::canonicalize, sync::mpsc};
+
+struct Server {
+    orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
+}
 
 pub async fn launch(
     address: &std::net::SocketAddr,
-    tx: mpsc::UnboundedSender<Event>,
+    orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
 ) -> Result<()> {
-    let server = axum::Server::try_bind(address)
+    let server = Server { orchestrator_tx };
+
+    let listener = axum::Server::try_bind(address)
         .with_context(|| format!("Failed to bind to {address}"))?
-        .serve(router(tx).into_make_service());
+        .serve(router(server).into_make_service());
     info!("Listening on {address}");
-    server.await?;
+    listener.await?;
     Ok(())
 }
 
-fn router(tx: mpsc::UnboundedSender<Event>) -> Router {
+fn router(server: Server) -> Router {
     Router::new()
         .route("/game", get(game_get))
         .route("/shutdown", get(shutdown_get))
-        .with_state(tx)
+        .with_state(Arc::new(server))
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,7 +42,7 @@ struct GameParams {
 
 async fn game_get(
     Query(params): Query<GameParams>,
-    State(tx): State<mpsc::UnboundedSender<Event>>,
+    State(server): State<Arc<Server>>,
 ) -> impl IntoResponse {
     let file = match canonicalize(params.file).await {
         Ok(f) => f,
@@ -47,8 +54,8 @@ async fn game_get(
     };
 
     let event = match params.event.as_str() {
-        "start" => Event::GameStarted(file),
-        "end" => Event::GameEnded(file),
+        "start" => orchestrator::Event::GameStarted(file),
+        "end" => orchestrator::Event::GameEnded(file),
         _ => {
             info!(
                 "GET /game (file {:?}) -> 400 (invalid event: {})",
@@ -62,8 +69,8 @@ async fn game_get(
         }
     };
 
-    if let Err(e) = tx.send(event) {
-        let e = anyhow!(e).context("failed to send event on channel");
+    if let Err(e) = server.orchestrator_tx.send(event) {
+        let e = anyhow!(e).context("failed to send event to orchestrator");
         error!("GET /game -> 500 ({e:?})");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
@@ -72,8 +79,11 @@ async fn game_get(
     StatusCode::NO_CONTENT.into_response()
 }
 
-async fn shutdown_get(State(tx): State<mpsc::UnboundedSender<Event>>) -> impl IntoResponse {
-    if let Err(e) = tx.send(Event::StartShutdown) {
+async fn shutdown_get(State(server): State<Arc<Server>>) -> impl IntoResponse {
+    if let Err(e) = server
+        .orchestrator_tx
+        .send(orchestrator::Event::StartShutdown)
+    {
         let e = anyhow!(e).context("failed to send event on channel");
         error!("GET /shutdown -> 500 ({e:?})");
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
