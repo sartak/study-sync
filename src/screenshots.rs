@@ -53,7 +53,7 @@ impl Screenshots {
         Ok(())
     }
 
-    async fn upload_path_to_directory(&self, path: &Path, directory: String) -> () {
+    async fn upload_path_to_directory(&self, path: &Path, directory: String) {
         let mut url = format!("{}/{directory}", self.screenshot_url);
         let extension = path
             .extension()
