@@ -1,8 +1,8 @@
 use crate::orchestrator::{self, Language};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
@@ -54,6 +54,7 @@ pub struct Intake {
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
     intake_url: String,
     play_to_intake: HashMap<i64, String>,
+    buffer: VecDeque<Event>,
 }
 
 pub fn launch() -> (IntakePre, mpsc::UnboundedSender<Event>) {
@@ -72,6 +73,7 @@ impl IntakePre {
             orchestrator_tx,
             intake_url,
             play_to_intake: HashMap::new(),
+            buffer: VecDeque::new(),
         };
         intake.start().await
     }
@@ -79,85 +81,148 @@ impl IntakePre {
 
 impl Intake {
     pub async fn start(mut self) -> Result<()> {
-        while let Some(event) = self.rx.recv().await {
-            info!("Handling event {event:?}");
-            match event {
-                Event::PreviousGame { play_id, intake_id } => {
-                    self.play_to_intake.insert(play_id, intake_id);
+        loop {
+            // if we have a buffer, then we want to just check on the channel and continue
+            // otherwise block
+            let event = if self.buffer.is_empty() {
+                self.rx.recv().await
+            } else {
+                match self.rx.try_recv() {
+                    Ok(e) => Some(e),
+                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                    _ => None,
                 }
+            };
 
-                Event::SubmitStarted {
-                    play_id,
-                    game_label,
-                    language,
-                    start_time,
-                } => {
-                    let (intake_id, submitted_start) = self
-                        .create_intake(game_label, language, start_time, None)
-                        .await;
-                    self.play_to_intake.insert(play_id, intake_id.clone());
-                    let event = orchestrator::Event::IntakeStarted {
-                        play_id,
-                        intake_id,
-                        submitted_start,
-                    };
-                    if let Err(e) = self.orchestrator_tx.send(event) {
-                        error!("Could not send to orchestrator: {e:?}");
-                        continue;
+            if let Some(event) = event {
+                info!("Handling event {event:?}");
+                match event {
+                    Event::StartShutdown => break,
+                    _ => self.buffer.push_back(event),
+                }
+            } else if let Some(event) = self.buffer.pop_front() {
+                match &event {
+                    Event::PreviousGame { play_id, intake_id } => {
+                        self.play_to_intake.insert(*play_id, intake_id.clone());
                     }
-                }
 
-                Event::SubmitEnded {
-                    play_id,
-                    intake_id,
-                    end_time,
-                } => {
-                    self.play_to_intake.remove(&play_id);
-
-                    let submitted_end = self.finish_intake(intake_id, end_time).await;
-                    let event = orchestrator::Event::IntakeEnded {
+                    Event::SubmitStarted {
                         play_id,
-                        submitted_end,
-                    };
-                    if let Err(e) = self.orchestrator_tx.send(event) {
-                        error!("Could not send to orchestrator: {e:?}");
-                        continue;
-                    }
-                }
-
-                Event::SubmitFull {
-                    play_id,
-                    game_label,
-                    language,
-                    start_time,
-                    end_time,
-                } => {
-                    let event;
-                    if let Some(intake_id) = self.play_to_intake.remove(&play_id) {
-                        let submitted_end = self.finish_intake(intake_id, end_time).await;
-                        event = orchestrator::Event::IntakeEnded {
-                            play_id,
-                            submitted_end,
+                        game_label,
+                        language,
+                        start_time,
+                    } => {
+                        let (intake_id, submitted_start) = match self
+                            .create_intake(game_label, language, *start_time, None)
+                            .await
+                        {
+                            Ok((i, s)) => (i, s),
+                            Err(e) => {
+                                error!("Could not create intake: {e:?}");
+                                self.buffer.push_front(event);
+                                info!("Sleeping for 5s before trying again");
+                                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                continue;
+                            }
                         };
-                    } else {
-                        let (intake_id, submitted_start) = self
-                            .create_intake(game_label, language, start_time, Some(end_time))
-                            .await;
-                        event = orchestrator::Event::IntakeFull {
-                            play_id,
+
+                        self.play_to_intake.insert(*play_id, intake_id.clone());
+                        let msg = orchestrator::Event::IntakeStarted {
+                            play_id: *play_id,
                             intake_id,
                             submitted_start,
-                            submitted_end: submitted_start,
                         };
+                        if let Err(e) = self.orchestrator_tx.send(msg) {
+                            error!("Could not send to orchestrator: {e:?}");
+                            continue;
+                        }
                     }
 
-                    if let Err(e) = self.orchestrator_tx.send(event) {
-                        error!("Could not send to orchestrator: {e:?}");
-                        continue;
+                    Event::SubmitEnded {
+                        play_id,
+                        intake_id,
+                        end_time,
+                    } => {
+                        self.play_to_intake.remove(play_id);
+
+                        let submitted_end = match self.finish_intake(intake_id, *end_time).await {
+                            Ok(e) => e,
+                            Err(e) => {
+                                error!("Could not finish intake: {e:?}");
+                                self.buffer.push_front(event);
+                                info!("Sleeping for 5s before trying again");
+                                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                continue;
+                            }
+                        };
+
+                        let msg = orchestrator::Event::IntakeEnded {
+                            play_id: *play_id,
+                            submitted_end,
+                        };
+                        if let Err(e) = self.orchestrator_tx.send(msg) {
+                            error!("Could not send to orchestrator: {e:?}");
+                            continue;
+                        }
                     }
+
+                    Event::SubmitFull {
+                        play_id,
+                        game_label,
+                        language,
+                        start_time,
+                        end_time,
+                    } => {
+                        let msg;
+                        if let Some(intake_id) = self.play_to_intake.remove(play_id) {
+                            let submitted_end =
+                                match self.finish_intake(&intake_id, *end_time).await {
+                                    Ok(e) => e,
+                                    Err(e) => {
+                                        error!("Could not finish intake: {e:?}");
+                                        self.buffer.push_front(event);
+                                        info!("Sleeping for 5s before trying again");
+                                        tokio::time::sleep(tokio::time::Duration::from_secs(5))
+                                            .await;
+                                        continue;
+                                    }
+                                };
+
+                            msg = orchestrator::Event::IntakeEnded {
+                                play_id: *play_id,
+                                submitted_end,
+                            };
+                        } else {
+                            let (intake_id, submitted) = match self
+                                .create_intake(game_label, language, *start_time, Some(*end_time))
+                                .await
+                            {
+                                Ok((i, s)) => (i, s),
+                                Err(e) => {
+                                    error!("Could not create intake: {e:?}");
+                                    self.buffer.push_front(event);
+                                    info!("Sleeping for 5s before trying again");
+                                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                    continue;
+                                }
+                            };
+
+                            msg = orchestrator::Event::IntakeFull {
+                                play_id: *play_id,
+                                intake_id,
+                                submitted_start: submitted,
+                                submitted_end: submitted,
+                            };
+                        }
+
+                        if let Err(e) = self.orchestrator_tx.send(msg) {
+                            error!("Could not send to orchestrator: {e:?}");
+                            continue;
+                        }
+                    }
+
+                    Event::StartShutdown => unreachable!(),
                 }
-
-                Event::StartShutdown => break,
             }
         }
 
@@ -167,38 +232,38 @@ impl Intake {
 
     async fn create_intake(
         &self,
-        game_label: String,
-        language: Language,
+        game_label: &str,
+        language: &Language,
         start_time: u64,
         end_time: Option<u64>,
-    ) -> (String, u64) {
+    ) -> Result<(String, u64)> {
         #[derive(Debug, Serialize)]
-        struct Request {
+        struct Request<'a> {
             #[serde(rename = "startTime")]
             start_time: u64,
             #[serde(rename = "endTime")]
             end_time: Option<u64>,
             #[serde(rename = "game")]
-            game_label: String,
-            language: String,
+            game_label: &'a str,
+            language: &'a str,
         }
 
         let request = Request {
             start_time,
             end_time,
             game_label,
-            language: language.intake_str(),
+            language: &language.intake_str(),
         };
 
         let (submitted, IntakeResponseObject { rowid }) =
-            self.request(reqwest::Method::POST, request).await;
-        (rowid, submitted)
+            self.request(reqwest::Method::POST, request).await?;
+        Ok((rowid, submitted))
     }
 
-    async fn finish_intake(&self, intake_id: String, end_time: u64) -> u64 {
+    async fn finish_intake(&self, intake_id: &str, end_time: u64) -> Result<u64> {
         #[derive(Debug, Serialize)]
-        struct Request {
-            rowid: String,
+        struct Request<'a> {
+            rowid: &'a str,
             #[serde(rename = "endTime")]
             end_time: u64,
         }
@@ -208,70 +273,56 @@ impl Intake {
             end_time,
         };
 
-        let (submitted, _) = self.request(reqwest::Method::PATCH, request).await;
-        submitted
+        let (submitted, _) = self.request(reqwest::Method::PATCH, request).await?;
+        Ok(submitted)
     }
 
-    async fn request<R>(&self, method: reqwest::Method, request: R) -> (u64, IntakeResponseObject)
+    async fn request<R>(
+        &self,
+        method: reqwest::Method,
+        request: R,
+    ) -> Result<(u64, IntakeResponseObject)>
     where
         R: Serialize + std::fmt::Debug,
     {
         let url = &self.intake_url;
 
-        loop {
-            let submitted = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
+        let submitted = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
 
-            let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(10));
-            let client = builder.build().unwrap();
+        let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(10));
+        let client = builder.build()?;
 
-            match client
-                .request(method.clone(), url)
-                .json(&request)
-                .send()
-                .await
-            {
-                Ok(res) => {
-                    if res.status().is_success() {
-                        match res.json().await {
-                            Ok(IntakeResponse {
-                                error: Some(error), ..
-                            }) => {
-                                error!("Error {method:?}ing {url:?} from server: {error}")
-                            }
-                            Ok(IntakeResponse {
-                                message: Some(message),
-                                object: Some(obj),
-                                ..
-                            }) => {
-                                info!("Success {method:?}ing {url:?}: {message}");
-                                break (submitted, obj);
-                            }
-                            Ok(res) => {
-                                error!(
-                                    "Error pattern-matching {method:?} {url:?} response: {res:?}"
-                                )
-                            }
-                            Err(e) => {
-                                error!("Error decoding {method:?} {url:?} response as JSON: {e:?}")
-                            }
-                        }
-                    } else {
-                        error!(
-                            "Error {method:?}ing {url:?} with {request:?}: got status code {}",
-                            res.status()
-                        );
-                    }
-                }
-                Err(e) => {
-                    error!("Error {method:?}ing {url:?} with {request:?}: {e:?}");
-                }
+        let res = client
+            .request(method.clone(), url)
+            .json(&request)
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            return Err(anyhow!(
+                "Error {method:?}ing {url:?} with {request:?}: got status code {}",
+                res.status()
+            ));
+        }
+
+        match res.json().await? {
+            IntakeResponse {
+                error: Some(error), ..
+            } => Err(anyhow!("Error {method:?}ing {url:?} from server: {error}")),
+            IntakeResponse {
+                message: Some(message),
+                object: Some(obj),
+                ..
+            } => {
+                info!("Success {method:?}ing {url:?}: {message}");
+                Ok((submitted, obj))
             }
-
-            info!("Sleeping for 5s before trying again");
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            res => Err(anyhow!(
+                "Error pattern-matching {method:?} {url:?} response: {res:?}"
+            )),
         }
     }
 }
