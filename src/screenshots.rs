@@ -69,6 +69,31 @@ impl Screenshots {
         Ok(())
     }
 
+    async fn digest_for_path(&self, path: &Path) -> Option<String> {
+        let res = {
+            let path = path.to_owned();
+            tokio::task::spawn_blocking(move || -> Result<String> {
+                let mut file = std::fs::File::open(path)?;
+                let mut hasher = Sha1::new();
+                std::io::copy(&mut file, &mut hasher)?;
+                Ok(hex::encode(hasher.finalize()))
+            })
+        }
+        .await;
+
+        match res {
+            Ok(Ok(digest)) => Some(digest),
+            Ok(Err(e)) => {
+                error!("Could not calculate digest of {path:?}: {e:?}");
+                None
+            }
+            Err(e) => {
+                error!("Could not join future for calculating digest of {path:?}: {e:?}");
+                None
+            }
+        }
+    }
+
     async fn upload_path_to_directory(&self, path: &Path, directory: &str) {
         let mut url = format!("{}/{directory}", self.screenshot_url);
         let extension = path
@@ -81,28 +106,10 @@ impl Screenshots {
             "image/png"
         };
 
-        let res = {
-            let path = path.to_owned();
-            tokio::task::spawn_blocking(move || -> Result<String> {
-                let mut file = std::fs::File::open(path)?;
-                let mut hasher = Sha1::new();
-                std::io::copy(&mut file, &mut hasher)?;
-                Ok(hex::encode(hasher.finalize()))
-            })
-            .await
-        };
-        match res {
-            Ok(Ok(digest)) => {
-                let param = format!("?screenshot_digest={digest}");
-                url.push_str(&param);
-            }
-            Ok(Err(e)) => {
-                error!("Could not calculate digest of {path:?}: {e:?}");
-            }
-            Err(e) => {
-                error!("Could not join future for calculating digest of {path:?}: {e:?}");
-            }
-        };
+        if let Some(digest) = self.digest_for_path(path).await {
+            let param = format!("?screenshot_digest={digest}");
+            url.push_str(&param);
+        }
 
         loop {
             match File::open(path).await {
