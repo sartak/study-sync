@@ -1,4 +1,4 @@
-use crate::{database::Database, intake, screenshots};
+use crate::{database::Database, intake, screenshots, watch};
 use anyhow::Result;
 use log::{error, info};
 use std::path::{Path, PathBuf};
@@ -68,6 +68,7 @@ pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
     intake_tx: mpsc::UnboundedSender<intake::Event>,
     screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
+    watch_tx: mpsc::UnboundedSender<watch::Event>,
     hold_screenshots: PathBuf,
     trim_game_prefix: Option<String>,
     database: Database,
@@ -89,6 +90,7 @@ impl OrchestratorPre {
         trim_game_prefix: Option<String>,
         intake_tx: mpsc::UnboundedSender<intake::Event>,
         screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
+        watch_tx: mpsc::UnboundedSender<watch::Event>,
     ) -> Result<()> {
         self.upload_existing_screenshots(&hold_screenshots, &screenshots_tx)?;
         self.upload_extra_screenshots(&hold_screenshots, watch_screenshots, &screenshots_tx);
@@ -99,6 +101,7 @@ impl OrchestratorPre {
             rx: self.rx,
             intake_tx,
             screenshots_tx,
+            watch_tx,
             hold_screenshots,
             trim_game_prefix,
             database,
@@ -444,6 +447,9 @@ impl Orchestrator {
                     }
                     if let Err(e) = self.screenshots_tx.send(screenshots::Event::StartShutdown) {
                         error!("Could not send to screenshots: {e:?}");
+                    }
+                    if let Err(e) = self.watch_tx.send(watch::Event::StartShutdown) {
+                        error!("Could not send to watch: {e:?}");
                     }
                     return Ok(());
                 }

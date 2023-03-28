@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
 
     let server = server::launch(&listen, orchestrator_tx.clone());
 
-    let watch = watch::launch();
+    let (watch, watch_tx) = watch::launch();
 
     let orchestrator = orchestrator.start(
         dbh,
@@ -76,6 +76,7 @@ async fn main() -> Result<()> {
         args.trim_game_prefix,
         intake_tx,
         screenshots_tx,
+        watch_tx,
     );
     let intake = intake.start(orchestrator_tx.clone(), args.intake_url);
     let screenshots = screenshots.start(args.screenshot_url, args.extra_directory);
