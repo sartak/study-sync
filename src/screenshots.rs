@@ -25,6 +25,7 @@ pub struct Screenshots {
     screenshot_url: String,
     extra_directory: String,
     buffer: VecDeque<Event>,
+    digest_cache: Option<(PathBuf, String)>,
 }
 
 pub fn launch() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
@@ -39,6 +40,7 @@ impl ScreenshotsPre {
             screenshot_url,
             extra_directory,
             buffer: VecDeque::new(),
+            digest_cache: None,
         };
         screenshots.start().await
     }
@@ -84,10 +86,8 @@ impl Screenshots {
                     }
 
                     Event::UploadExtra(path) => {
-                        if let Err(e) = self
-                            .upload_path_to_directory(path, &self.extra_directory)
-                            .await
-                        {
+                        let directory = self.extra_directory.clone();
+                        if let Err(e) = self.upload_path_to_directory(path, &directory).await {
                             error!("Could not upload {path:?}: {e:?}");
                             self.buffer.push_front(event);
                             info!("Sleeping for 5s before trying again");
@@ -109,7 +109,13 @@ impl Screenshots {
         Ok(())
     }
 
-    async fn digest_for_path(&self, path: &Path) -> Option<String> {
+    async fn digest_for_path(&mut self, path: &Path) -> Option<String> {
+        if let Some((p, digest)) = &self.digest_cache {
+            if p == path {
+                return Some(digest.clone());
+            }
+        }
+
         let res = {
             let path = path.to_owned();
             tokio::task::spawn_blocking(move || -> Result<String> {
@@ -122,7 +128,10 @@ impl Screenshots {
         .await;
 
         match res {
-            Ok(Ok(digest)) => Some(digest),
+            Ok(Ok(digest)) => {
+                self.digest_cache = Some((path.to_owned(), digest.clone()));
+                Some(digest)
+            }
             Ok(Err(e)) => {
                 error!("Could not calculate digest of {path:?}: {e:?}");
                 None
@@ -134,7 +143,7 @@ impl Screenshots {
         }
     }
 
-    async fn upload_path_to_directory(&self, path: &Path, directory: &str) -> Result<()> {
+    async fn upload_path_to_directory(&mut self, path: &Path, directory: &str) -> Result<()> {
         let mut url = format!("{}/{directory}", self.screenshot_url);
         let extension = path
             .extension()
