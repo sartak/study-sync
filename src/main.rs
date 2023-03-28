@@ -8,7 +8,7 @@ mod watch;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tokio::select;
+use tokio::join;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -84,11 +84,23 @@ async fn main() -> Result<()> {
     let intake = intake.start(orchestrator_tx.clone(), args.intake_url);
     let screenshots = screenshots.start(args.screenshot_url, args.extra_directory);
 
-    select! {
-        res = server => { res }
-        res = watch => { res }
-        res = orchestrator => { res }
-        res = intake => { res }
-        res = screenshots => { res }
+    // Would love to know a better way to do this
+    let (server_res, watch_res, orchestrator_res, intake_res, screenshots_res) =
+        join!(server, watch, orchestrator, intake, screenshots);
+
+    let res = vec![
+        server_res,
+        watch_res,
+        orchestrator_res,
+        intake_res,
+        screenshots_res,
+    ]
+    .into_iter()
+    .find(Result::is_err);
+
+    if let Some(err) = res {
+        err
+    } else {
+        Ok(())
     }
 }
