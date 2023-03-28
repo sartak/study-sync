@@ -326,6 +326,11 @@ impl Orchestrator {
                             error!("Could not move screenshot {path:?} to {destination:?}: {e:?}");
                             continue;
                         }
+
+                        let event = screenshots::Event::UploadExtra(destination);
+                        if let Err(e) = self.screenshots_tx.send(event) {
+                            error!("Could not send to screenshots: {e:?}");
+                        }
                     }
                 }
 
