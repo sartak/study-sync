@@ -77,7 +77,7 @@ pub struct Orchestrator {
 
 pub fn launch() -> (OrchestratorPre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
-    return (OrchestratorPre { rx }, tx);
+    (OrchestratorPre { rx }, tx)
 }
 
 impl OrchestratorPre {

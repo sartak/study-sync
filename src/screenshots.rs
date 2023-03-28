@@ -24,7 +24,7 @@ pub struct Screenshots {
 
 pub fn launch() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
-    return (ScreenshotsPre { rx }, tx);
+    (ScreenshotsPre { rx }, tx)
 }
 
 impl ScreenshotsPre {

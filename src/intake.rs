@@ -57,7 +57,7 @@ pub struct Intake {
 
 pub fn launch() -> (IntakePre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
-    return (IntakePre { rx }, tx);
+    (IntakePre { rx }, tx)
 }
 
 impl IntakePre {
