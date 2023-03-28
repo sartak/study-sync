@@ -7,8 +7,9 @@ mod watch;
 
 use anyhow::{anyhow, Result};
 use clap::Parser;
-use std::path::PathBuf;
-use tokio::try_join;
+use log::{error, info};
+use std::{path::PathBuf, process};
+use tokio::{select, signal, sync::mpsc, try_join};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -84,6 +85,29 @@ async fn main() -> Result<()> {
     );
     let intake = intake.start(orchestrator_tx.clone(), args.intake_url);
     let screenshots = screenshots.start(args.screenshot_url, args.extra_directory);
+    let signal = shutdown_signal(orchestrator_tx);
 
-    try_join!(server, watch, orchestrator, intake, screenshots).map(|_| ())
+    try_join!(server, watch, orchestrator, intake, screenshots, signal).map(|_| ())
+}
+
+async fn shutdown_signal(
+    orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
+) -> Result<()> {
+    let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())?;
+    select!(
+        _ = signal::ctrl_c() => info!("Got interrupt signal, shutting down"),
+        _ = sigterm.recv() => info!("Got sigterm, shutting down"),
+    );
+
+    if let Err(e) = orchestrator_tx.send(orchestrator::Event::StartShutdown) {
+        error!("Could not send to orchestrator: {e:?}");
+    }
+
+    tokio::spawn(async {
+        signal::ctrl_c().await.unwrap();
+        error!("Received multiple shutdown signals, exiting now");
+        process::exit(1);
+    });
+
+    Ok(())
 }
