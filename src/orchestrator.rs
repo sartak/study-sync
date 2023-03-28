@@ -181,7 +181,7 @@ impl Orchestrator {
 
                     let (remove_res, game_res) = join!(
                         remove_file(&latest_screenshot),
-                        self.database.game_for_path(&path),
+                        self.database.game_for_path(path),
                     );
 
                     if let Err(e) = remove_res {
@@ -405,14 +405,14 @@ impl Orchestrator {
 
     fn fixed_path<'p>(&self, path: &'p Path) -> Option<&'p Path> {
         match self.trim_game_prefix {
-            Some(ref prefix) => match path.strip_prefix(&prefix) {
+            Some(ref prefix) => match path.strip_prefix(prefix) {
                 Ok(p) => Some(p),
                 Err(e) => {
                     error!("Could not trim prefix {prefix:?} from {path:?}: {e:?}");
                     None
                 }
             },
-            None => Some(&path),
+            None => Some(path),
         }
     }
 

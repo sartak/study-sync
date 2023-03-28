@@ -68,7 +68,7 @@ impl Screenshots {
         let res = {
             let path = path.to_owned();
             tokio::task::spawn_blocking(move || -> Result<String> {
-                let mut file = std::fs::File::open(&path)?;
+                let mut file = std::fs::File::open(path)?;
                 let mut hasher = Sha1::new();
                 std::io::copy(&mut file, &mut hasher)?;
                 Ok(hex::encode(hasher.finalize()))
