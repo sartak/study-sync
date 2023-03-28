@@ -85,11 +85,13 @@ impl OrchestratorPre {
         self,
         database: Database,
         hold_screenshots: PathBuf,
+        watch_screenshots: Vec<PathBuf>,
         trim_game_prefix: Option<String>,
         intake_tx: mpsc::UnboundedSender<intake::Event>,
         screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
     ) -> Result<()> {
         self.upload_existing_screenshots(&hold_screenshots, &screenshots_tx)?;
+        self.upload_extra_screenshots(&hold_screenshots, watch_screenshots, &screenshots_tx);
 
         let previous = self.load_backlog(&database, &intake_tx).await?;
 
@@ -111,7 +113,7 @@ impl OrchestratorPre {
         hold_screenshots: &Path,
         screenshots_tx: &mpsc::UnboundedSender<screenshots::Event>,
     ) -> Result<()> {
-        for entry in walkdir::WalkDir::new(&hold_screenshots)
+        for entry in walkdir::WalkDir::new(hold_screenshots)
             .sort_by_file_name()
             .min_depth(3)
             .into_iter()
@@ -121,7 +123,7 @@ impl OrchestratorPre {
             let path = entry.into_path();
             let mut directory = path.clone();
             directory.pop();
-            let directory = directory.strip_prefix(&hold_screenshots)?;
+            let directory = directory.strip_prefix(hold_screenshots)?;
             info!("Found batched screenshot {path:?} for {directory:?}");
             if let Some(directory) = directory.to_str() {
                 let event = screenshots::Event::UploadScreenshot(path, directory.to_owned());
@@ -130,6 +132,47 @@ impl OrchestratorPre {
         }
 
         Ok(())
+    }
+
+    fn upload_extra_screenshots(
+        &self,
+        hold_screenshots: &Path,
+        watch_screenshots: Vec<PathBuf>,
+        screenshots_tx: &mpsc::UnboundedSender<screenshots::Event>,
+    ) {
+        let extra_directory = hold_screenshots.join("extra/");
+        let screenshots_tx = screenshots_tx.clone();
+
+        tokio::spawn(async move {
+            for dir in watch_screenshots {
+                for entry in walkdir::WalkDir::new(dir)
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .filter(|e| e.file_type().is_file())
+                {
+                    let path = entry.into_path();
+                    info!("Moving extra screenshot {path:?} into {extra_directory:?}");
+                    let destination = extra_directory.join(path.file_name().unwrap());
+                    if let Err(e) = rename(&path, &destination).await {
+                        error!("Could not move screenshot {path:?} to {destination:?}: {e:?}");
+                    }
+                }
+            }
+
+            for entry in walkdir::WalkDir::new(extra_directory)
+                .sort_by_file_name()
+                .into_iter()
+                .filter_map(Result::ok)
+                .filter(|e| e.file_type().is_file())
+            {
+                let path = entry.into_path();
+                info!("Uploading extra screenshot {path:?}");
+                let event = screenshots::Event::UploadExtra(path);
+                if let Err(e) = screenshots_tx.send(event) {
+                    error!("Could not send to screenshots: {e:?}");
+                }
+            }
+        });
     }
 
     async fn load_backlog(
