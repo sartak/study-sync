@@ -1,5 +1,5 @@
 use crate::{database::Database, intake, screenshots};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use log::{error, info};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -89,12 +89,28 @@ impl OrchestratorPre {
         intake_tx: mpsc::UnboundedSender<intake::Event>,
         screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
     ) -> Result<()> {
-        if !hold_screenshots.is_dir() {
-            return Err(anyhow!(
-                "hold-screenshots {hold_screenshots:?} not a directory"
-            ));
-        }
+        self.upload_existing_screenshots(&hold_screenshots, &screenshots_tx)?;
 
+        let previous = self.load_backlog(&database, &intake_tx).await?;
+
+        let orchestrator = Orchestrator {
+            rx: self.rx,
+            intake_tx,
+            screenshots_tx,
+            hold_screenshots,
+            trim_game_prefix,
+            database,
+            current_play: previous,
+            previous_play: None,
+        };
+        orchestrator.start().await
+    }
+
+    fn upload_existing_screenshots(
+        &self,
+        hold_screenshots: &Path,
+        screenshots_tx: &mpsc::UnboundedSender<screenshots::Event>,
+    ) -> Result<()> {
         for entry in walkdir::WalkDir::new(&hold_screenshots)
             .sort_by_file_name()
             .min_depth(3)
@@ -113,6 +129,14 @@ impl OrchestratorPre {
             }
         }
 
+        Ok(())
+    }
+
+    async fn load_backlog(
+        &self,
+        database: &Database,
+        intake_tx: &mpsc::UnboundedSender<intake::Event>,
+    ) -> Result<Option<Play>> {
         let (previous, backlog) = join!(
             database.load_previously_playing(),
             database.load_intake_backlog(),
@@ -147,17 +171,7 @@ impl OrchestratorPre {
             }
         }
 
-        let orchestrator = Orchestrator {
-            rx: self.rx,
-            intake_tx,
-            screenshots_tx,
-            hold_screenshots,
-            trim_game_prefix,
-            database,
-            current_play: previous,
-            previous_play: None,
-        };
-        orchestrator.start().await
+        Ok(previous)
     }
 }
 

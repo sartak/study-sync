@@ -5,7 +5,7 @@ mod screenshots;
 mod server;
 mod watch;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use std::path::PathBuf;
 use tokio::select;
@@ -48,6 +48,13 @@ async fn main() -> Result<()> {
         .init();
 
     let listen = args.listen.parse()?;
+    if !args.hold_screenshots.is_dir() {
+        return Err(anyhow!(
+            "hold-screenshots {:?} not a directory",
+            args.hold_screenshots
+        ));
+    }
+
     let dbh = database::connect(args.plays_database, args.games_database).await?;
 
     let (intake, intake_tx) = intake::launch();
