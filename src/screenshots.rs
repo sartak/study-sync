@@ -11,6 +11,7 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 #[derive(Debug)]
 pub enum Event {
     UploadScreenshot(PathBuf, String),
+    UploadExtra(PathBuf),
 }
 
 pub struct ScreenshotsPre {
@@ -20,6 +21,7 @@ pub struct ScreenshotsPre {
 pub struct Screenshots {
     rx: mpsc::UnboundedReceiver<Event>,
     screenshot_url: String,
+    extra_directory: String,
 }
 
 pub fn launch() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
@@ -28,10 +30,11 @@ pub fn launch() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
 }
 
 impl ScreenshotsPre {
-    pub async fn start(self, screenshot_url: String) -> Result<()> {
+    pub async fn start(self, screenshot_url: String, extra_directory: String) -> Result<()> {
         let screenshots = Screenshots {
             rx: self.rx,
             screenshot_url,
+            extra_directory,
         };
         screenshots.start().await
     }
@@ -43,9 +46,17 @@ impl Screenshots {
             info!("Handling event {event:?}");
             match event {
                 Event::UploadScreenshot(path, directory) => {
-                    self.upload_path_to_directory(&path, directory).await;
+                    self.upload_path_to_directory(&path, &directory).await;
                     if let Err(e) = remove_file(&path).await {
                         error!("Could not remove uploaded screenshot file {path:?}: {e:?}");
+                    }
+                }
+
+                Event::UploadExtra(path) => {
+                    self.upload_path_to_directory(&path, &self.extra_directory)
+                        .await;
+                    if let Err(e) = remove_file(&path).await {
+                        error!("Could not remove extra screenshot file {path:?}: {e:?}");
                     }
                 }
             }
@@ -53,7 +64,7 @@ impl Screenshots {
         Ok(())
     }
 
-    async fn upload_path_to_directory(&self, path: &Path, directory: String) {
+    async fn upload_path_to_directory(&self, path: &Path, directory: &str) {
         let mut url = format!("{}/{directory}", self.screenshot_url);
         let extension = path
             .extension()

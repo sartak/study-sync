@@ -30,6 +30,9 @@ struct Args {
     #[arg(long)]
     screenshot_url: String,
 
+    #[arg(long)]
+    extra_directory: String,
+
     #[clap(long, required = true, num_args = 1.., value_delimiter = ',')]
     watch_screenshots: Vec<PathBuf>,
 
@@ -78,7 +81,7 @@ async fn main() -> Result<()> {
         screenshots_tx,
     );
     let intake = intake.start(orchestrator_tx.clone(), args.intake_url);
-    let screenshots = screenshots.start(args.screenshot_url);
+    let screenshots = screenshots.start(args.screenshot_url, args.extra_directory);
 
     select! {
         res = server => { res }
