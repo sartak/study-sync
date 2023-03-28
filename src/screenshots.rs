@@ -67,9 +67,7 @@ impl Screenshots {
                     Event::StartShutdown => break,
                     _ => self.buffer.push_back(event),
                 }
-            }
-
-            if let Some(event) = self.buffer.pop_front() {
+            } else if let Some(event) = self.buffer.pop_front() {
                 match &event {
                     Event::UploadScreenshot(path, directory) => {
                         if let Err(e) = self.upload_path_to_directory(path, directory).await {
