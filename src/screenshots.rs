@@ -61,9 +61,11 @@ impl Screenshots {
                     }
                 }
 
-                Event::StartShutdown => return Ok(()),
+                Event::StartShutdown => break,
             }
         }
+
+        info!("screenshots gracefully shut down");
         Ok(())
     }
 

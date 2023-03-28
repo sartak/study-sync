@@ -451,10 +451,12 @@ impl Orchestrator {
                     if let Err(e) = self.watch_tx.send(watch::Event::StartShutdown) {
                         error!("Could not send to watch: {e:?}");
                     }
-                    return Ok(());
+                    break;
                 }
             }
         }
+
+        info!("orchestrator gracefully shut down");
         Ok(())
     }
 

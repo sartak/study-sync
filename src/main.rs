@@ -8,7 +8,7 @@ mod watch;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use std::path::PathBuf;
-use tokio::join;
+use tokio::try_join;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -86,23 +86,5 @@ async fn main() -> Result<()> {
         orchestrator_tx.clone(),
     );
 
-    // Would love to know a better way to do this
-    let (server_res, watch_res, orchestrator_res, intake_res, screenshots_res) =
-        join!(server, watch, orchestrator, intake, screenshots);
-
-    let res = vec![
-        server_res,
-        watch_res,
-        orchestrator_res,
-        intake_res,
-        screenshots_res,
-    ]
-    .into_iter()
-    .find(Result::is_err);
-
-    if let Some(err) = res {
-        err
-    } else {
-        Ok(())
-    }
+    try_join!(server, watch, orchestrator, intake, screenshots).map(|_| ())
 }

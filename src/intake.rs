@@ -157,9 +157,11 @@ impl Intake {
                     }
                 }
 
-                Event::StartShutdown => return Ok(()),
+                Event::StartShutdown => break,
             }
         }
+
+        info!("intake gracefully shut down");
         Ok(())
     }
 

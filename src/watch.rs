@@ -1,7 +1,7 @@
 mod fs;
 
 use crate::orchestrator;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::path::PathBuf;
 use tokio::{select, sync::mpsc};
@@ -60,23 +60,31 @@ impl Watch {
                 msg = self.rx.recv() => {
                     if let Some(event) = msg {
                         match event {
-                            Event::StartShutdown => return Ok(())
+                            Event::StartShutdown => break,
                         }
                     }
                 },
                 msg = self.fs_rx.recv() => {
-                    if let Some(path) = msg {
-                        info!("Handling path {path:?}");
-                        let event = match self.target {
-                            WatchTarget::Screenshots => orchestrator::Event::ScreenshotCreated(path),
-                            WatchTarget::SaveFiles => orchestrator::Event::SaveFileCreated(path),
-                        };
-                        if let Err(e) = self.orchestrator_tx.send(event) {
-                            error!("Failed to send to orchestrator: {e:?}");
+                    match msg {
+                        Some(path) => {
+                            info!("Handling path {path:?}");
+                            let event = match self.target {
+                                WatchTarget::Screenshots => orchestrator::Event::ScreenshotCreated(path),
+                                WatchTarget::SaveFiles => orchestrator::Event::SaveFileCreated(path),
+                            };
+                            if let Err(e) = self.orchestrator_tx.send(event) {
+                                error!("Failed to send to orchestrator: {e:?}");
+                            }
+                        },
+                        None => {
+                            return Err(anyhow!("filesystem watcher channel unexpectedly closed"));
                         }
                     }
                 },
             }
         }
+
+        info!("watch gracefully shut down");
+        Ok(())
     }
 }
