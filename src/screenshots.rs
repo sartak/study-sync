@@ -90,7 +90,10 @@ impl Screenshots {
                             self.notify_error(format!(
                                 "Could not remove uploaded screenshot file {path:?}: {e:?}"
                             ));
+                            continue;
                         }
+
+                        self.notify_success(true, format!("Uploaded screenshot {path:?}"));
                     }
 
                     Event::UploadExtra(path) => {

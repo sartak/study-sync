@@ -411,11 +411,14 @@ impl Orchestrator {
 
                     if let Err(e) = self
                         .database
-                        .initial_intake(play_id, intake_id, submitted_start)
+                        .initial_intake(play_id, &intake_id, submitted_start)
                         .await
                     {
                         self.notify_error(format!("Could not update intake: {e:?}"));
+                        continue;
                     }
+
+                    self.notify_success(true, format!("Created intake {intake_id:?}"));
                 }
 
                 Event::IntakeEnded {
@@ -430,7 +433,10 @@ impl Orchestrator {
 
                     if let Err(e) = self.database.final_intake(play_id, submitted_end).await {
                         self.notify_error(format!("Could not update intake: {e:?}"));
+                        continue;
                     }
+
+                    self.notify_success(true, format!("Finished intake"));
                 }
 
                 Event::IntakeFull {
@@ -449,11 +455,14 @@ impl Orchestrator {
 
                     if let Err(e) = self
                         .database
-                        .full_intake(play_id, intake_id, submitted_start, submitted_end)
+                        .full_intake(play_id, &intake_id, submitted_start, submitted_end)
                         .await
                     {
                         self.notify_error(format!("Could not update intake: {e:?}"));
+                        continue;
                     }
+
+                    self.notify_success(true, format!("Created full intake {intake_id:?}"));
                 }
 
                 Event::StartShutdown => {

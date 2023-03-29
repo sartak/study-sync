@@ -309,9 +309,10 @@ impl Database {
     pub async fn initial_intake(
         &self,
         play_id: i64,
-        intake_id: String,
+        intake_id: &str,
         submitted_start: u64,
     ) -> Result<()> {
+        let intake_id = intake_id.to_string();
         self.plays_dbh
             .call(move |conn| {
                 conn.execute(
@@ -338,10 +339,11 @@ impl Database {
     pub async fn full_intake(
         &self,
         play_id: i64,
-        intake_id: String,
+        intake_id: &str,
         submitted_start: u64,
         submitted_end: u64,
     ) -> Result<()> {
+        let intake_id = intake_id.to_string();
         self.plays_dbh
             .call(move |conn| {
                 conn.execute(
