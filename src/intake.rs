@@ -139,7 +139,7 @@ impl Intake {
                             submitted_start,
                         };
                         if let Err(e) = self.orchestrator_tx.send(msg) {
-                            self.notify_error(format!("Could not send to orchestrator: {e:?}"));
+                            self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
                             continue;
                         }
                     }
@@ -167,7 +167,7 @@ impl Intake {
                             submitted_end,
                         };
                         if let Err(e) = self.orchestrator_tx.send(msg) {
-                            self.notify_error(format!("Could not send to orchestrator: {e:?}"));
+                            self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
                             continue;
                         }
                     }
@@ -223,7 +223,7 @@ impl Intake {
                         }
 
                         if let Err(e) = self.orchestrator_tx.send(msg) {
-                            self.notify_error(format!("Could not send to orchestrator: {e:?}"));
+                            self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
                             continue;
                         }
                     }

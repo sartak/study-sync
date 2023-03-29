@@ -237,7 +237,7 @@ impl Orchestrator {
             match event {
                 Event::GameStarted(path) => {
                     if let Some(previous_play) = &self.current_play {
-                        self.notify_error(format!(
+                        self.notify_error(&format!(
                             "Already have a current play! {previous_play:?}"
                         ));
                     }
@@ -254,7 +254,7 @@ impl Orchestrator {
 
                     if let Err(e) = remove_res {
                         if e.kind() != std::io::ErrorKind::NotFound {
-                            self.notify_error(format!(
+                            self.notify_error(&format!(
                                 "Could not remove latest screenshot {latest_screenshot:?}: {e:?}"
                             ));
                             continue;
@@ -264,7 +264,7 @@ impl Orchestrator {
                     let game = match game_res {
                         Ok(game) => game,
                         Err(e) => {
-                            self.notify_error(format!(
+                            self.notify_error(&format!(
                                 "Could not find game for path {path:?}: {e:?}"
                             ));
                             continue;
@@ -274,7 +274,7 @@ impl Orchestrator {
                     let play = match self.database.started_playing(game).await {
                         Ok(play) => play,
                         Err(e) => {
-                            self.notify_error(format!("Could not start play: {e:?}"));
+                            self.notify_error(&format!("Could not start play: {e:?}"));
                             continue;
                         }
                     };
@@ -290,16 +290,16 @@ impl Orchestrator {
                             start_time: play.start_time,
                         };
                         if let Err(e) = self.intake_tx.send(event) {
-                            self.notify_error(format!("Could not send to intake: {e:?}"));
+                            self.notify_error(&format!("Could not send to intake: {e:?}"));
                         }
                     }
 
                     let dir = self.current_dir().unwrap();
                     if let Err(e) = create_dir_all(&dir).await {
-                        self.notify_error(format!("Could not create {dir:?}: {e:?}"));
+                        self.notify_error(&format!("Could not create {dir:?}: {e:?}"));
                     }
 
-                    self.notify_success(false, "Play began!".to_string());
+                    self.notify_success(false, "Play began!");
                 }
 
                 Event::GameEnded(path) => {
@@ -310,7 +310,7 @@ impl Orchestrator {
 
                     if let Some(play) = self.current_play.take() {
                         if play.game.path != path {
-                            self.notify_error(format!(
+                            self.notify_error(&format!(
                                 "Previous game does not match! {path:?}, expected {play:?}"
                             ));
                         } else {
@@ -325,13 +325,13 @@ impl Orchestrator {
                                     end_time: play.end_time.unwrap(),
                                 };
                                 if let Err(e) = self.intake_tx.send(event) {
-                                    self.notify_error(format!("Could not send to intake: {e:?}"));
+                                    self.notify_error(&format!("Could not send to intake: {e:?}"));
                                 }
                             }
-                            self.notify_success(false, "Play ended!".to_string());
+                            self.notify_success(false, "Play ended!");
                         }
                     } else {
-                        self.notify_error("No previous game!".to_string());
+                        self.notify_error("No previous game!");
                     }
 
                     self.set_current_play(None);
@@ -352,7 +352,7 @@ impl Orchestrator {
                             join!(rename(&path, &destination), remove_file(&latest_screenshot));
 
                         if let Err(e) = rename_res {
-                            self.notify_error(format!(
+                            self.notify_error(&format!(
                                 "Could not move screenshot {path:?} to {destination:?}: {e:?}"
                             ));
                             continue;
@@ -360,13 +360,13 @@ impl Orchestrator {
 
                         if let Err(e) = remove_res {
                             if e.kind() != std::io::ErrorKind::NotFound {
-                                self.notify_error(format!("Could not remove latest screenshot {latest_screenshot:?}: {e:?}"));
+                                self.notify_error(&format!("Could not remove latest screenshot {latest_screenshot:?}: {e:?}"));
                                 continue;
                             }
                         }
 
                         if let Err(e) = hard_link(&destination, &latest_screenshot).await {
-                            self.notify_error(format!("Could not hardlink screenshot {path:?} to {latest_screenshot:?}: {e:?}"));
+                            self.notify_error(&format!("Could not hardlink screenshot {path:?} to {latest_screenshot:?}: {e:?}"));
                             continue;
                         }
 
@@ -375,14 +375,14 @@ impl Orchestrator {
                             play.game.directory.clone(),
                         );
                         if let Err(e) = self.screenshots_tx.send(event) {
-                            self.notify_error(format!("Could not send to screenshots: {e:?}"));
+                            self.notify_error(&format!("Could not send to screenshots: {e:?}"));
                         }
                     } else {
                         let mut destination = extra_directory.clone();
                         destination.push(path.file_name().unwrap());
-                        self.notify_error(format!("Dropping screenshot {path:?} to {destination:?} because no current playing!"));
+                        self.notify_error(&format!("Dropping screenshot {path:?} to {destination:?} because no current playing!"));
                         if let Err(e) = rename(&path, &destination).await {
-                            self.notify_error(format!(
+                            self.notify_error(&format!(
                                 "Could not move screenshot {path:?} to {destination:?}: {e:?}"
                             ));
                             continue;
@@ -390,7 +390,7 @@ impl Orchestrator {
 
                         let event = screenshots::Event::UploadExtra(destination);
                         if let Err(e) = self.screenshots_tx.send(event) {
-                            self.notify_error(format!("Could not send to screenshots: {e:?}"));
+                            self.notify_error(&format!("Could not send to screenshots: {e:?}"));
                         }
                     }
                 }
@@ -414,11 +414,11 @@ impl Orchestrator {
                         .initial_intake(play_id, &intake_id, submitted_start)
                         .await
                     {
-                        self.notify_error(format!("Could not update intake: {e:?}"));
+                        self.notify_error(&format!("Could not update intake: {e:?}"));
                         continue;
                     }
 
-                    self.notify_success(true, format!("Created intake {intake_id:?}"));
+                    self.notify_success(true, &format!("Created intake {intake_id:?}"));
                 }
 
                 Event::IntakeEnded {
@@ -432,11 +432,11 @@ impl Orchestrator {
                     }
 
                     if let Err(e) = self.database.final_intake(play_id, submitted_end).await {
-                        self.notify_error(format!("Could not update intake: {e:?}"));
+                        self.notify_error(&format!("Could not update intake: {e:?}"));
                         continue;
                     }
 
-                    self.notify_success(true, "Finished intake".to_string());
+                    self.notify_success(true, "Finished intake");
                 }
 
                 Event::IntakeFull {
@@ -458,28 +458,28 @@ impl Orchestrator {
                         .full_intake(play_id, &intake_id, submitted_start, submitted_end)
                         .await
                     {
-                        self.notify_error(format!("Could not update intake: {e:?}"));
+                        self.notify_error(&format!("Could not update intake: {e:?}"));
                         continue;
                     }
 
-                    self.notify_success(true, format!("Created full intake {intake_id:?}"));
+                    self.notify_success(true, &format!("Created full intake {intake_id:?}"));
                 }
 
                 Event::StartShutdown => {
                     if let Err(e) = self.intake_tx.send(intake::Event::StartShutdown) {
-                        self.notify_error(format!("Could not send to intake: {e:?}"));
+                        self.notify_error(&format!("Could not send to intake: {e:?}"));
                     }
                     if let Err(e) = self.screenshots_tx.send(screenshots::Event::StartShutdown) {
-                        self.notify_error(format!("Could not send to screenshots: {e:?}"));
+                        self.notify_error(&format!("Could not send to screenshots: {e:?}"));
                     }
                     if let Err(e) = self.watch_tx.send(watch::Event::StartShutdown) {
-                        self.notify_error(format!("Could not send to watch: {e:?}"));
+                        self.notify_error(&format!("Could not send to watch: {e:?}"));
                     }
                     if let Err(e) = self.server_tx.send(server::Event::StartShutdown) {
-                        self.notify_error(format!("Could not send to server: {e:?}"));
+                        self.notify_error(&format!("Could not send to server: {e:?}"));
                     }
                     if let Err(e) = self.notify_tx.send(notify::Event::StartShutdown) {
-                        self.notify_error(format!("Could not send to notify: {e:?}"));
+                        self.notify_error(&format!("Could not send to notify: {e:?}"));
                     }
                     break;
                 }
@@ -516,7 +516,7 @@ impl Orchestrator {
             Some(ref prefix) => match path.strip_prefix(prefix) {
                 Ok(p) => Some(p),
                 Err(e) => {
-                    self.notify_error(format!(
+                    self.notify_error(&format!(
                         "Could not trim prefix {prefix:?} from {path:?}: {e:?}"
                     ));
                     None

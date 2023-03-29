@@ -85,7 +85,7 @@ async fn game_get(
         Ok(f) => f,
         Err(e) => {
             let e = anyhow!(e).context("failed to canonicalize path");
-            server.notify_error(format!("GET /game -> 500 ({e:?})"));
+            server.notify_error(&format!("GET /game -> 500 ({e:?})"));
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -108,7 +108,7 @@ async fn game_get(
 
     if let Err(e) = server.orchestrator_tx.send(event) {
         let e = anyhow!(e).context("failed to send event to orchestrator");
-        server.notify_error(format!("GET /game -> 500 ({e:?})"));
+        server.notify_error(&format!("GET /game -> 500 ({e:?})"));
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 

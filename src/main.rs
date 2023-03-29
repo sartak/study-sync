@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
     .map(|_| ());
 
     if let Err(e) = &res {
-        emergency(format!("fatal error: {e:?}"), &args.led_path, notify_tx).await;
+        emergency(&format!("fatal error: {e:?}"), &args.led_path, notify_tx).await;
     } else {
         info!("main gracefully shut down");
     }
@@ -122,7 +122,7 @@ async fn main() -> Result<()> {
 }
 
 async fn emergency(
-    message: String,
+    message: &str,
     led_path: &Path,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
 ) {
@@ -130,7 +130,7 @@ async fn emergency(
 
     if notify_tx.is_closed() {
         notify::blink_emergency(led_path).await;
-    } else if let Err(e) = notify_tx.send(notify::Event::Emergency(message)) {
+    } else if let Err(e) = notify_tx.send(notify::Event::Emergency(message.to_owned())) {
         error!("Could not send to notify: {e:?}");
     }
 }

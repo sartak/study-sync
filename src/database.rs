@@ -249,7 +249,10 @@ impl Database {
                 } = match games.get(&p.game_path) {
                     Some(g) => g,
                     None => {
-                        self.notify_error(format!("Did not find mapping for game {}", p.game_path));
+                        self.notify_error(&format!(
+                            "Did not find mapping for game {}",
+                            p.game_path
+                        ));
                         return None;
                     }
                 };

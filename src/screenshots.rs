@@ -87,13 +87,13 @@ impl Screenshots {
                         }
 
                         if let Err(e) = remove_file(&path).await {
-                            self.notify_error(format!(
+                            self.notify_error(&format!(
                                 "Could not remove uploaded screenshot file {path:?}: {e:?}"
                             ));
                             continue;
                         }
 
-                        self.notify_success(true, format!("Uploaded screenshot {path:?}"));
+                        self.notify_success(true, &format!("Uploaded screenshot {path:?}"));
                     }
 
                     Event::UploadExtra(path) => {
@@ -107,7 +107,7 @@ impl Screenshots {
                         }
 
                         if let Err(e) = remove_file(&path).await {
-                            self.notify_error(format!(
+                            self.notify_error(&format!(
                                 "Could not remove extra screenshot file {path:?}: {e:?}"
                             ));
                         }
@@ -146,11 +146,11 @@ impl Screenshots {
                 Some(digest)
             }
             Ok(Err(e)) => {
-                self.notify_error(format!("Could not calculate digest of {path:?}: {e:?}"));
+                self.notify_error(&format!("Could not calculate digest of {path:?}: {e:?}"));
                 None
             }
             Err(e) => {
-                self.notify_error(format!(
+                self.notify_error(&format!(
                     "Could not join future for calculating digest of {path:?}: {e:?}"
                 ));
                 None

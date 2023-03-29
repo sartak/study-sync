@@ -112,29 +112,29 @@ pub trait Notifier {
 
     fn notify_tx(&self) -> &mpsc::UnboundedSender<Event>;
 
-    fn notify_success(&self, quick: bool, message: String) {
+    fn notify_success(&self, quick: bool, message: &str) {
         info!(target: self.notify_target(), "Success: {message:?}");
 
         if let Err(e) = self
             .notify_tx()
-            .send(Event::Success(quick, message.clone()))
+            .send(Event::Success(quick, message.to_owned()))
         {
             error!(target: self.notify_target(), "Could not send success {message:?} to notify: {e:?}");
         }
     }
 
-    fn notify_error(&self, message: String) {
+    fn notify_error(&self, message: &str) {
         error!(target: self.notify_target(), "Error: {message:?}");
 
-        if let Err(e) = self.notify_tx().send(Event::Error(message.clone())) {
+        if let Err(e) = self.notify_tx().send(Event::Error(message.to_owned())) {
             error!(target: self.notify_target(), "Could not send error {message:?} to notify: {e:?}");
         }
     }
 
-    fn notify_emergency(&self, message: String) {
+    fn notify_emergency(&self, message: &str) {
         error!(target: self.notify_target(), "Emergency: {message:?}");
 
-        if let Err(e) = self.notify_tx().send(Event::Emergency(message.clone())) {
+        if let Err(e) = self.notify_tx().send(Event::Emergency(message.to_owned())) {
             error!(target: self.notify_target(), "Could not send emergency {message:?} to notify: {e:?}");
         }
     }

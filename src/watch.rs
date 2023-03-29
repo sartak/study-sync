@@ -79,7 +79,7 @@ impl Watch {
                                 WatchTarget::SaveFiles => orchestrator::Event::SaveFileCreated(path),
                             };
                             if let Err(e) = self.orchestrator_tx.send(event) {
-                                self.notify_error(format!("Failed to send to orchestrator: {e:?}"));
+                                self.notify_error(&format!("Failed to send to orchestrator: {e:?}"));
                             }
                         },
                         None => {
