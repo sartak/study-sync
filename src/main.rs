@@ -67,14 +67,14 @@ async fn main() -> Result<()> {
         return Err(anyhow!("led-path {:?} not a file", args.led_path));
     }
 
-    let dbh = database::connect(args.plays_database, args.games_database).await?;
-
     let (server, server_tx) = server::launch();
     let (watch, watch_tx) = watch::launch();
     let (orchestrator, orchestrator_tx) = orchestrator::launch();
     let (intake, intake_tx) = intake::launch();
     let (screenshots, screenshots_tx) = screenshots::launch();
     let (notify, notify_tx) = notify::launch();
+
+    let dbh = database::connect(args.plays_database, args.games_database, notify_tx).await?;
 
     let server = server.start(&listen, orchestrator_tx.clone(), notify_tx.clone());
     let watch = watch.start(

@@ -1,5 +1,8 @@
-use crate::intake;
-use crate::orchestrator::{Game, Language, Play};
+use crate::{
+    intake,
+    notify::{self, Notifier},
+    orchestrator::{Game, Language, Play},
+};
 use anyhow::Result;
 use futures::future::try_join_all;
 use itertools::Itertools;
@@ -8,15 +11,20 @@ use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::join;
+use tokio::{join, sync::mpsc};
 use tokio_rusqlite::Connection;
 
 pub struct Database {
     plays_dbh: Connection,
     games_dbh: Connection,
+    notify_tx: mpsc::UnboundedSender<notify::Event>,
 }
 
-pub async fn connect<P>(plays_path: P, games_path: P) -> Result<Database>
+pub async fn connect<P>(
+    plays_path: P,
+    games_path: P,
+    notify_tx: mpsc::UnboundedSender<notify::Event>,
+) -> Result<Database>
 where
     P: AsRef<std::path::Path> + std::fmt::Debug,
 {
@@ -34,6 +42,7 @@ where
     Ok(Database {
         plays_dbh,
         games_dbh,
+        notify_tx,
     })
 }
 
@@ -120,9 +129,16 @@ impl Database {
 
     pub fn detach_save_currently_playing(&self, id: Option<i64>) {
         let db = self.plays_dbh.clone();
+
+        let notify_tx = self.notify_tx().clone();
         tokio::spawn(async move {
             if let Err(e) = save_currently_playing(db, id).await {
-                error!("Error saving currently playing: {e:?}")
+                let message = format!("Error saving currently playing: {e:?}");
+                error!("{}", message);
+
+                if let Err(e) = notify_tx.send(notify::Event::Error(message.clone())) {
+                    error!("Could not send error {message:?} to notify: {e:?}");
+                }
             }
         });
     }
@@ -233,7 +249,7 @@ impl Database {
                 } = match games.get(&p.game_path) {
                     Some(g) => g,
                     None => {
-                        error!("Did not find mapping for game {}", p.game_path);
+                        self.notify_error(format!("Did not find mapping for game {}", p.game_path));
                         return None;
                     }
                 };
@@ -346,5 +362,15 @@ impl rusqlite::types::FromSql for Language {
             "can" => Language::Cantonese,
             _ => Language::Other(v.to_owned()),
         })
+    }
+}
+
+impl Notifier for Database {
+    fn notify_target(&self) -> &str {
+        "study_sync::database"
+    }
+
+    fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
+        &self.notify_tx
     }
 }
