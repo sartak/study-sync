@@ -157,10 +157,16 @@ impl Screenshots {
 
     async fn upload_path_to_directory(&mut self, path: &Path, directory: &str) -> Result<()> {
         let mut url = format!("{}/{directory}", self.screenshot_url);
+
+        let basename = path
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .unwrap_or("");
         let extension = path
             .extension()
             .and_then(std::ffi::OsStr::to_str)
             .unwrap_or("png");
+
         let content_type = if extension == "jpg" {
             "image/jpeg"
         } else {
@@ -182,6 +188,7 @@ impl Screenshots {
         let res = client
             .post(&url)
             .header(reqwest::header::CONTENT_TYPE, content_type)
+            .header("X-Study-Basename", basename)
             .body(body)
             .send()
             .await?;
