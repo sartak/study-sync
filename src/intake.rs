@@ -259,7 +259,7 @@ impl Intake {
             start_time,
             end_time,
             game_label,
-            language: &language.intake_str(),
+            language: language.intake_str(),
         };
 
         let (submitted, IntakeResponseObject { rowid }) =
@@ -335,8 +335,8 @@ impl Intake {
 }
 
 impl Language {
-    fn intake_str(&self) -> String {
-        let lang = match self {
+    fn intake_str(&self) -> &str {
+        match self {
             Language::English => "English",
             Language::Japanese => "日本語",
             Language::Cantonese => "廣東話",
@@ -344,8 +344,7 @@ impl Language {
                 warn!("Mapping intake language {lang} to English");
                 "English"
             }
-        };
-        lang.to_string()
+        }
     }
 }
 
