@@ -26,7 +26,7 @@ pub struct Server {
     notify_tx: mpsc::UnboundedSender<notify::Event>,
 }
 
-pub fn launch() -> (ServerPre, mpsc::UnboundedSender<Event>) {
+pub fn prepare() -> (ServerPre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
     (ServerPre { rx }, tx)
 }

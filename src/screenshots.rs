@@ -30,7 +30,7 @@ pub struct Screenshots {
     digest_cache: Option<(PathBuf, String)>,
 }
 
-pub fn launch() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
+pub fn prepare() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
     (ScreenshotsPre { rx }, tx)
 }

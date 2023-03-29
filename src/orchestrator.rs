@@ -78,7 +78,7 @@ pub struct Orchestrator {
     previous_play: Option<Play>,
 }
 
-pub fn launch() -> (OrchestratorPre, mpsc::UnboundedSender<Event>) {
+pub fn prepare() -> (OrchestratorPre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
     (OrchestratorPre { rx }, tx)
 }

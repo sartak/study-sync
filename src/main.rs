@@ -67,12 +67,12 @@ async fn main() -> Result<()> {
         ));
     }
 
-    let (server, server_tx) = server::launch();
-    let (watch, watch_tx) = watch::launch();
-    let (orchestrator, orchestrator_tx) = orchestrator::launch();
-    let (intake, intake_tx) = intake::launch();
-    let (screenshots, screenshots_tx) = screenshots::launch();
-    let (notify, notify_tx) = notify::launch();
+    let (server, server_tx) = server::prepare();
+    let (watch, watch_tx) = watch::prepare();
+    let (orchestrator, orchestrator_tx) = orchestrator::prepare();
+    let (intake, intake_tx) = intake::prepare();
+    let (screenshots, screenshots_tx) = screenshots::prepare();
+    let (notify, notify_tx) = notify::prepare();
 
     let dbh =
         database::connect(args.plays_database, args.games_database, notify_tx.clone()).await?;

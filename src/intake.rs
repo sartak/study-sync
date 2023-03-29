@@ -61,7 +61,7 @@ pub struct Intake {
     buffer: VecDeque<Event>,
 }
 
-pub fn launch() -> (IntakePre, mpsc::UnboundedSender<Event>) {
+pub fn prepare() -> (IntakePre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
     (IntakePre { rx }, tx)
 }

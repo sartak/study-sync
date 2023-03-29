@@ -31,7 +31,7 @@ pub struct Watch {
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
 }
 
-pub fn launch() -> (WatchPre, mpsc::UnboundedSender<Event>) {
+pub fn prepare() -> (WatchPre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
     (WatchPre { rx }, tx)
 }

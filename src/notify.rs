@@ -22,7 +22,7 @@ pub struct Notify {
     led_path: PathBuf,
 }
 
-pub fn launch() -> (NotifyPre, mpsc::UnboundedSender<Event>) {
+pub fn prepare() -> (NotifyPre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
     (NotifyPre { rx }, tx)
 }
