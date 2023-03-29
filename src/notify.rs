@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 #[derive(Debug)]
 pub enum Event {
-    Success(String),
+    Success(bool, String),
     Error(String),
     Emergency(String),
     StartShutdown,
@@ -37,9 +37,9 @@ impl NotifyPre {
     }
 }
 
-pub async fn blink_success(led_path: &Path) {
+pub async fn blink_success(quick: bool, led_path: &Path) {
     blink_red(led_path).await;
-    wait(500).await;
+    wait(if quick { 100 } else { 500 }).await;
     blink_green(led_path).await;
 
     wait(500).await;
@@ -95,7 +95,7 @@ impl Notify {
         while let Some(event) = self.rx.recv().await {
             info!("Handling {event:?}");
             match event {
-                Event::Success(_) => blink_success(&self.led_path).await,
+                Event::Success(quick, _) => blink_success(quick, &self.led_path).await,
                 Event::Error(_) => blink_error(&self.led_path).await,
                 Event::Emergency(_) => blink_emergency(&self.led_path).await,
                 Event::StartShutdown => break,
@@ -112,10 +112,13 @@ pub trait Notifier {
 
     fn notify_tx(&self) -> &mpsc::UnboundedSender<Event>;
 
-    fn notify_success(&self, message: String) {
+    fn notify_success(&self, quick: bool, message: String) {
         info!(target: self.notify_target(), "Success: {message:?}");
 
-        if let Err(e) = self.notify_tx().send(Event::Success(message.clone())) {
+        if let Err(e) = self
+            .notify_tx()
+            .send(Event::Success(quick, message.clone()))
+        {
             error!(target: self.notify_target(), "Could not send success {message:?} to notify: {e:?}");
         }
     }

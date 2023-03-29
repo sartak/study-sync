@@ -299,7 +299,7 @@ impl Orchestrator {
                         self.notify_error(format!("Could not create {dir:?}: {e:?}"));
                     }
 
-                    self.notify_success("Play began!".to_string());
+                    self.notify_success(false, "Play began!".to_string());
                 }
 
                 Event::GameEnded(path) => {
@@ -328,7 +328,7 @@ impl Orchestrator {
                                     self.notify_error(format!("Could not send to intake: {e:?}"));
                                 }
                             }
-                            self.notify_success("Play ended!".to_string());
+                            self.notify_success(false, "Play ended!".to_string());
                         }
                     } else {
                         self.notify_error("No previous game!".to_string());
