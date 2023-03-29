@@ -436,7 +436,7 @@ impl Orchestrator {
                         continue;
                     }
 
-                    self.notify_success(true, format!("Finished intake"));
+                    self.notify_success(true, "Finished intake".to_string());
                 }
 
                 Event::IntakeFull {

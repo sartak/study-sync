@@ -181,18 +181,17 @@ impl Intake {
                     } => {
                         let msg;
                         if let Some(intake_id) = self.play_to_intake.get(play_id) {
-                            let submitted_end =
-                                match self.finish_intake(&intake_id, *end_time).await {
-                                    Ok(e) => e,
-                                    Err(e) => {
-                                        error!("Could not finish intake: {e:?}");
-                                        self.buffer.push_front(event);
-                                        info!("Sleeping for 5s before trying again");
-                                        tokio::time::sleep(tokio::time::Duration::from_secs(5))
-                                            .await;
-                                        continue;
-                                    }
-                                };
+                            let submitted_end = match self.finish_intake(intake_id, *end_time).await
+                            {
+                                Ok(e) => e,
+                                Err(e) => {
+                                    error!("Could not finish intake: {e:?}");
+                                    self.buffer.push_front(event);
+                                    info!("Sleeping for 5s before trying again");
+                                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                    continue;
+                                }
+                            };
 
                             self.play_to_intake.remove(play_id);
 
