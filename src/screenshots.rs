@@ -1,3 +1,4 @@
+use crate::notify::{self, Notifier};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 use reqwest::Body;
@@ -22,6 +23,7 @@ pub struct ScreenshotsPre {
 
 pub struct Screenshots {
     rx: mpsc::UnboundedReceiver<Event>,
+    notify_tx: mpsc::UnboundedSender<notify::Event>,
     screenshot_url: String,
     extra_directory: String,
     buffer: VecDeque<Event>,
@@ -34,9 +36,15 @@ pub fn launch() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
 }
 
 impl ScreenshotsPre {
-    pub async fn start(self, screenshot_url: String, extra_directory: String) -> Result<()> {
+    pub async fn start(
+        self,
+        notify_tx: mpsc::UnboundedSender<notify::Event>,
+        screenshot_url: String,
+        extra_directory: String,
+    ) -> Result<()> {
         let screenshots = Screenshots {
             rx: self.rx,
+            notify_tx,
             screenshot_url,
             extra_directory,
             buffer: VecDeque::new(),
@@ -79,7 +87,9 @@ impl Screenshots {
                         }
 
                         if let Err(e) = remove_file(&path).await {
-                            error!("Could not remove uploaded screenshot file {path:?}: {e:?}");
+                            self.notify_error(format!(
+                                "Could not remove uploaded screenshot file {path:?}: {e:?}"
+                            ));
                         }
                     }
 
@@ -94,7 +104,9 @@ impl Screenshots {
                         }
 
                         if let Err(e) = remove_file(&path).await {
-                            error!("Could not remove extra screenshot file {path:?}: {e:?}");
+                            self.notify_error(format!(
+                                "Could not remove extra screenshot file {path:?}: {e:?}"
+                            ));
                         }
                     }
 
@@ -131,11 +143,13 @@ impl Screenshots {
                 Some(digest)
             }
             Ok(Err(e)) => {
-                error!("Could not calculate digest of {path:?}: {e:?}");
+                self.notify_error(format!("Could not calculate digest of {path:?}: {e:?}"));
                 None
             }
             Err(e) => {
-                error!("Could not join future for calculating digest of {path:?}: {e:?}");
+                self.notify_error(format!(
+                    "Could not join future for calculating digest of {path:?}: {e:?}"
+                ));
                 None
             }
         }
@@ -183,5 +197,15 @@ impl Screenshots {
         info!("Successfully uploaded {path:?} to {url:?}: {message}");
 
         Ok(())
+    }
+}
+
+impl Notifier for Screenshots {
+    fn notify_target(&self) -> &str {
+        "study_sync::screenshots"
+    }
+
+    fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
+        &self.notify_tx
     }
 }

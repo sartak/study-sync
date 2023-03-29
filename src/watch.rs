@@ -1,6 +1,9 @@
 mod fs;
 
-use crate::orchestrator;
+use crate::{
+    notify::{self, Notifier},
+    orchestrator,
+};
 use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::path::PathBuf;
@@ -23,6 +26,7 @@ pub struct WatchPre {
 pub struct Watch {
     rx: mpsc::UnboundedReceiver<Event>,
     fs_rx: mpsc::UnboundedReceiver<PathBuf>,
+    notify_tx: mpsc::UnboundedSender<notify::Event>,
     target: WatchTarget,
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
 }
@@ -38,6 +42,7 @@ impl WatchPre {
         paths: Vec<PathBuf>,
         target: WatchTarget,
         orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
+        notify_tx: mpsc::UnboundedSender<notify::Event>,
     ) -> Result<()> {
         let (fs_tx, fs_rx) = mpsc::unbounded_channel();
 
@@ -48,6 +53,7 @@ impl WatchPre {
             fs_rx,
             target,
             orchestrator_tx,
+            notify_tx,
         };
         watch.start().await
     }
@@ -73,7 +79,7 @@ impl Watch {
                                 WatchTarget::SaveFiles => orchestrator::Event::SaveFileCreated(path),
                             };
                             if let Err(e) = self.orchestrator_tx.send(event) {
-                                error!("Failed to send to orchestrator: {e:?}");
+                                self.notify_error(format!("Failed to send to orchestrator: {e:?}"));
                             }
                         },
                         None => {
@@ -86,5 +92,15 @@ impl Watch {
 
         info!("watch gracefully shut down");
         Ok(())
+    }
+}
+
+impl Notifier for Watch {
+    fn notify_target(&self) -> &str {
+        "study_sync::watch"
+    }
+
+    fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
+        &self.notify_tx
     }
 }

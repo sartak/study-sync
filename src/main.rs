@@ -1,5 +1,6 @@
 mod database;
 mod intake;
+mod notify;
 mod orchestrator;
 mod screenshots;
 mod server;
@@ -40,6 +41,9 @@ struct Args {
     #[arg(long)]
     hold_screenshots: PathBuf,
 
+    #[arg(long)]
+    led_path: PathBuf,
+
     #[clap(flatten)]
     verbose: clap_verbosity_flag::Verbosity,
 }
@@ -59,6 +63,10 @@ async fn main() -> Result<()> {
         ));
     }
 
+    if !args.led_path.is_file() {
+        return Err(anyhow!("led-path {:?} not a file", args.led_path));
+    }
+
     let dbh = database::connect(args.plays_database, args.games_database).await?;
 
     let (server, server_tx) = server::launch();
@@ -66,12 +74,14 @@ async fn main() -> Result<()> {
     let (orchestrator, orchestrator_tx) = orchestrator::launch();
     let (intake, intake_tx) = intake::launch();
     let (screenshots, screenshots_tx) = screenshots::launch();
+    let (notify, notify_tx) = notify::launch();
 
-    let server = server.start(&listen, orchestrator_tx.clone());
+    let server = server.start(&listen, orchestrator_tx.clone(), notify_tx.clone());
     let watch = watch.start(
         args.watch_screenshots.clone(),
         watch::WatchTarget::Screenshots,
         orchestrator_tx.clone(),
+        notify_tx.clone(),
     );
     let orchestrator = orchestrator.start(
         dbh,
@@ -82,12 +92,24 @@ async fn main() -> Result<()> {
         screenshots_tx,
         watch_tx,
         server_tx,
+        notify_tx.clone(),
     );
-    let intake = intake.start(orchestrator_tx.clone(), args.intake_url);
-    let screenshots = screenshots.start(args.screenshot_url, args.extra_directory);
+    let intake = intake.start(orchestrator_tx.clone(), notify_tx.clone(), args.intake_url);
+    let screenshots =
+        screenshots.start(notify_tx.clone(), args.screenshot_url, args.extra_directory);
+    let notify = notify.start(args.led_path);
     let signal = shutdown_signal(orchestrator_tx);
 
-    try_join!(server, watch, orchestrator, intake, screenshots, signal).map(|_| ())
+    try_join!(
+        server,
+        watch,
+        orchestrator,
+        intake,
+        screenshots,
+        notify,
+        signal
+    )
+    .map(|_| ())
 }
 
 async fn shutdown_signal(

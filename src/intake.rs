@@ -1,4 +1,7 @@
-use crate::orchestrator::{self, Language};
+use crate::{
+    notify::{self, Notifier},
+    orchestrator::{self, Language},
+};
 use anyhow::{anyhow, Result};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -52,6 +55,7 @@ pub struct IntakePre {
 pub struct Intake {
     rx: mpsc::UnboundedReceiver<Event>,
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
+    notify_tx: mpsc::UnboundedSender<notify::Event>,
     intake_url: String,
     play_to_intake: HashMap<i64, String>,
     buffer: VecDeque<Event>,
@@ -66,11 +70,13 @@ impl IntakePre {
     pub async fn start(
         self,
         orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
+        notify_tx: mpsc::UnboundedSender<notify::Event>,
         intake_url: String,
     ) -> Result<()> {
         let intake = Intake {
             rx: self.rx,
             orchestrator_tx,
+            notify_tx,
             intake_url,
             play_to_intake: HashMap::new(),
             buffer: VecDeque::new(),
@@ -133,7 +139,7 @@ impl Intake {
                             submitted_start,
                         };
                         if let Err(e) = self.orchestrator_tx.send(msg) {
-                            error!("Could not send to orchestrator: {e:?}");
+                            self.notify_error(format!("Could not send to orchestrator: {e:?}"));
                             continue;
                         }
                     }
@@ -161,7 +167,7 @@ impl Intake {
                             submitted_end,
                         };
                         if let Err(e) = self.orchestrator_tx.send(msg) {
-                            error!("Could not send to orchestrator: {e:?}");
+                            self.notify_error(format!("Could not send to orchestrator: {e:?}"));
                             continue;
                         }
                     }
@@ -216,7 +222,7 @@ impl Intake {
                         }
 
                         if let Err(e) = self.orchestrator_tx.send(msg) {
-                            error!("Could not send to orchestrator: {e:?}");
+                            self.notify_error(format!("Could not send to orchestrator: {e:?}"));
                             continue;
                         }
                     }
@@ -339,5 +345,15 @@ impl Language {
             }
         };
         lang.to_string()
+    }
+}
+
+impl Notifier for Intake {
+    fn notify_target(&self) -> &str {
+        "study_sync::intake"
+    }
+
+    fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
+        &self.notify_tx
     }
 }

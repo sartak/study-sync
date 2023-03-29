@@ -15,3 +15,4 @@ It's written in async Rust. The various components are:
 - `intake` syncs game starts and ends to an "intake" service
 - `screenshots` syncs screenshots to a "study" service
 - `saves` syncs save states to a "saves" service
+- `notify` writes to a GPIO pin which controls an LED to indicate progress and errors
