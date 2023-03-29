@@ -114,6 +114,8 @@ async fn main() -> Result<()> {
 
     if let Err(e) = &res {
         emergency(format!("fatal error: {e:?}"), &args.led_path, notify_tx).await;
+    } else {
+        info!("main gracefully shut down");
     }
 
     res
