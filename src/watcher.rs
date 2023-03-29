@@ -100,7 +100,11 @@ impl Watcher {
             }
         }
 
-        info!("watcher gracefully shut down");
+        match self.target {
+            WatchTarget::Screenshots => info!("screenshot watcher gracefully shut down"),
+            WatchTarget::SaveFiles => info!("save watcher gracefully shut down"),
+        };
+
         Ok(())
     }
 }

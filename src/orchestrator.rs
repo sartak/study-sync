@@ -1,7 +1,8 @@
 use crate::{
-    database::Database, intake, notify, notify::Notifier, screenshots, server, watcher,
+    database::Database, intake, notify, notify::Notifier, saves, screenshots, server, watcher,
 };
 use anyhow::Result;
+use chrono::prelude::*;
 use log::{error, info};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -70,10 +71,14 @@ pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
     intake_tx: mpsc::UnboundedSender<intake::Event>,
     screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
-    watcher_tx: mpsc::UnboundedSender<watcher::Event>,
+    saves_tx: mpsc::UnboundedSender<saves::Event>,
+    screenshot_watcher_tx: mpsc::UnboundedSender<watcher::Event>,
+    save_watcher_tx: mpsc::UnboundedSender<watcher::Event>,
     server_tx: mpsc::UnboundedSender<server::Event>,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
     hold_screenshots: PathBuf,
+    hold_saves: PathBuf,
+    keep_saves: PathBuf,
     trim_game_prefix: Option<String>,
     database: Database,
     current_play: Option<Play>,
@@ -90,16 +95,21 @@ impl OrchestratorPre {
         self,
         database: Database,
         hold_screenshots: PathBuf,
+        hold_saves: PathBuf,
+        keep_saves: PathBuf,
         watch_screenshots: &[PathBuf],
         trim_game_prefix: Option<String>,
         intake_tx: mpsc::UnboundedSender<intake::Event>,
         screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
-        watcher_tx: mpsc::UnboundedSender<watcher::Event>,
+        saves_tx: mpsc::UnboundedSender<saves::Event>,
+        screenshot_watcher_tx: mpsc::UnboundedSender<watcher::Event>,
+        save_watcher_tx: mpsc::UnboundedSender<watcher::Event>,
         server_tx: mpsc::UnboundedSender<server::Event>,
         notify_tx: mpsc::UnboundedSender<notify::Event>,
     ) -> Result<()> {
         self.upload_existing_screenshots(&hold_screenshots, &screenshots_tx)?;
         self.upload_extra_screenshots(&hold_screenshots, watch_screenshots, &screenshots_tx);
+        self.upload_existing_saves(&hold_saves, &saves_tx)?;
 
         let previous = self.load_backlog(&database, &intake_tx).await?;
 
@@ -107,10 +117,14 @@ impl OrchestratorPre {
             rx: self.rx,
             intake_tx,
             screenshots_tx,
-            watcher_tx,
+            saves_tx,
+            screenshot_watcher_tx,
+            save_watcher_tx,
             server_tx,
             notify_tx,
             hold_screenshots,
+            hold_saves,
+            keep_saves,
             trim_game_prefix,
             database,
             current_play: previous,
@@ -140,6 +154,39 @@ impl OrchestratorPre {
                 let event = screenshots::Event::UploadScreenshot(path, directory.to_owned());
                 screenshots_tx.send(event)?;
             }
+        }
+
+        Ok(())
+    }
+
+    fn upload_existing_saves(
+        &self,
+        hold_saves: &Path,
+        saves_tx: &mpsc::UnboundedSender<saves::Event>,
+    ) -> Result<()> {
+        for entry in walkdir::WalkDir::new(hold_saves)
+            .sort_by_file_name()
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            let path = entry.into_path();
+            let mut directory = path.clone();
+            directory.pop();
+            let directory = directory.strip_prefix(hold_saves)?;
+
+            let event = match directory.extension().map(|s| s.to_str()) {
+                Some(Some("png" | "jpg")) => {
+                    info!("Found batched screenshot {path:?} for {directory:?}");
+                    saves::Event::UploadScreenshot(path, directory.to_owned())
+                }
+                Some(Some(_)) => {
+                    info!("Found batched save {path:?} for {directory:?}");
+                    saves::Event::UploadSave(path, directory.to_owned())
+                }
+                _ => continue,
+            };
+            saves_tx.send(event)?;
         }
 
         Ok(())
@@ -283,23 +330,43 @@ impl Orchestrator {
                     };
 
                     self.set_current_play(Some(play));
+                    let play = self.current_play.as_ref().unwrap();
+                    let game = &play.game;
 
-                    if let Some(play) = &self.current_play {
-                        let game = &play.game;
-                        let event = intake::Event::SubmitStarted {
-                            play_id: play.id,
-                            game_label: game.label.clone(),
-                            language: game.language.clone(),
-                            start_time: play.start_time,
-                        };
-                        if let Err(e) = self.intake_tx.send(event) {
-                            self.notify_error(&format!("Could not send to intake: {e:?}"));
-                        }
+                    let event = intake::Event::SubmitStarted {
+                        play_id: play.id,
+                        game_label: game.label.clone(),
+                        language: game.language.clone(),
+                        start_time: play.start_time,
+                    };
+                    if let Err(e) = self.intake_tx.send(event) {
+                        self.notify_error(&format!("Could not send to intake: {e:?}"));
                     }
 
-                    let dir = self.current_dir().unwrap();
-                    if let Err(e) = create_dir_all(&dir).await {
-                        self.notify_error(&format!("Could not create {dir:?}: {e:?}"));
+                    let screenshot_dir = self.screenshot_dir().unwrap();
+
+                    let mut hold_save_dir = self.hold_saves.join(path);
+                    hold_save_dir.set_extension("");
+
+                    let mut keep_save_dir = self.keep_saves.join(path);
+                    keep_save_dir.set_extension("");
+
+                    let (screenshot_dir_res, hold_save_dir_res, keep_save_dir_res) = join!(
+                        create_dir_all(&screenshot_dir),
+                        create_dir_all(&hold_save_dir),
+                        create_dir_all(&keep_save_dir)
+                    );
+                    if let Err(e) = screenshot_dir_res {
+                        self.notify_error(&format!("Could not create {screenshot_dir:?}: {e:?}"));
+                        continue;
+                    }
+                    if let Err(e) = hold_save_dir_res {
+                        self.notify_error(&format!("Could not create {hold_save_dir:?}: {e:?}"));
+                        continue;
+                    }
+                    if let Err(e) = keep_save_dir_res {
+                        self.notify_error(&format!("Could not create {keep_save_dir:?}: {e:?}"));
+                        continue;
                     }
 
                     self.notify_success(false, "Play began!");
@@ -342,7 +409,7 @@ impl Orchestrator {
 
                 Event::ScreenshotCreated(path) => {
                     if let Some(play) = self.playing() {
-                        let mut destination = self.current_dir().unwrap();
+                        let mut destination = self.screenshot_dir().unwrap();
                         destination.push(self.now());
                         destination.set_extension(
                             path.extension()
@@ -398,7 +465,82 @@ impl Orchestrator {
                     }
                 }
 
-                Event::SaveFileCreated(path) => {}
+                Event::SaveFileCreated(path) => {
+                    let extension = match path.extension() {
+                        Some(e) => e,
+                        None => {
+                            self.notify_error(&format!(
+                                "Could not extract extension from {path:?}"
+                            ));
+                            continue;
+                        }
+                    };
+
+                    let mut directory = match self.fixed_path(&path) {
+                        Some(p) => p.to_path_buf(),
+                        None => continue,
+                    };
+                    directory.set_extension("");
+
+                    let mut target = directory.join(self.now_ymd());
+                    target.set_extension(extension);
+
+                    let hold_save_destination = self.hold_saves.join(&target);
+                    let keep_save_destination = self.keep_saves.join(&target);
+
+                    let mut hold_screenshot_destination = hold_save_destination.clone();
+                    let mut keep_screenshot_destination = keep_save_destination.clone();
+                    hold_screenshot_destination.set_extension("png");
+                    keep_screenshot_destination.set_extension("png");
+
+                    let (hold_save_res, keep_save_res, hold_screenshot_res, keep_screenshot_res) = join!(
+                        hard_link(&path, &hold_save_destination),
+                        hard_link(&path, &keep_save_destination),
+                        hard_link(&latest_screenshot, &hold_screenshot_destination),
+                        hard_link(&latest_screenshot, &keep_screenshot_destination),
+                    );
+
+                    if let Err(e) = hold_save_res {
+                        self.notify_error(&format!(
+                            "Could not hardlink save {path:?} to {hold_save_destination:?}: {e:?}"
+                        ));
+                        continue;
+                    }
+
+                    if let Err(e) = keep_save_res {
+                        self.notify_error(&format!(
+                            "Could not hardlink save {path:?} to {keep_save_destination:?}: {e:?}"
+                        ));
+                        continue;
+                    }
+
+                    if let Err(e) = keep_screenshot_res {
+                        self.notify_error(&format!(
+                            "Could not hardlink screenshot {latest_screenshot:?} to {keep_screenshot_destination:?}: {e:?}"
+                        ));
+                    }
+
+                    if let Err(e) = &hold_screenshot_res {
+                        self.notify_error(&format!(
+                            "Could not hardlink screenshot {latest_screenshot:?} to {hold_screenshot_destination:?}: {e:?}"
+                        ));
+                    }
+
+                    let event = saves::Event::UploadSave(hold_save_destination, directory.clone());
+                    if let Err(e) = self.saves_tx.send(event) {
+                        self.notify_error(&format!("Could not send to saves: {e:?}"));
+                        continue;
+                    }
+
+                    if hold_screenshot_res.is_ok() {
+                        let event =
+                            saves::Event::UploadScreenshot(hold_screenshot_destination, directory);
+                        if let Err(e) = self.saves_tx.send(event) {
+                            self.notify_error(&format!("Could not send to saves: {e:?}"));
+                            continue;
+                        }
+                    }
+                }
 
                 Event::IntakeStarted {
                     play_id,
@@ -475,8 +617,17 @@ impl Orchestrator {
                     if let Err(e) = self.screenshots_tx.send(screenshots::Event::StartShutdown) {
                         self.notify_error(&format!("Could not send to screenshots: {e:?}"));
                     }
-                    if let Err(e) = self.watcher_tx.send(watcher::Event::StartShutdown) {
-                        self.notify_error(&format!("Could not send to watcher: {e:?}"));
+                    if let Err(e) = self.saves_tx.send(saves::Event::StartShutdown) {
+                        self.notify_error(&format!("Could not send to saves: {e:?}"));
+                    }
+                    if let Err(e) = self
+                        .screenshot_watcher_tx
+                        .send(watcher::Event::StartShutdown)
+                    {
+                        self.notify_error(&format!("Could not send to screenshot_watcher: {e:?}"));
+                    }
+                    if let Err(e) = self.save_watcher_tx.send(watcher::Event::StartShutdown) {
+                        self.notify_error(&format!("Could not send to save_watcher: {e:?}"));
                     }
                     if let Err(e) = self.server_tx.send(server::Event::StartShutdown) {
                         self.notify_error(&format!("Could not send to server: {e:?}"));
@@ -497,7 +648,7 @@ impl Orchestrator {
         self.current_play.as_ref().or(self.previous_play.as_ref())
     }
 
-    fn current_dir(&self) -> Option<PathBuf> {
+    fn screenshot_dir(&self) -> Option<PathBuf> {
         self.current_play
             .as_ref()
             .map(|p| self.hold_screenshots.join(&p.game.directory))
@@ -535,6 +686,11 @@ impl Orchestrator {
             .unwrap()
             .as_millis()
             .to_string()
+    }
+
+    fn now_ymd(&self) -> String {
+        let now: DateTime<Local> = Local::now();
+        now.format("%Y-%m-%d-%H-%M-%S").to_string()
     }
 }
 

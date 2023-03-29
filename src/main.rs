@@ -2,6 +2,7 @@ mod database;
 mod intake;
 mod notify;
 mod orchestrator;
+mod saves;
 mod screenshots;
 mod server;
 mod watcher;
@@ -33,13 +34,25 @@ struct Args {
     screenshot_url: String,
 
     #[arg(long)]
+    save_url: String,
+
+    #[arg(long)]
     extra_directory: String,
 
     #[clap(long, required = true, num_args = 1.., value_delimiter = ',')]
     watch_screenshots: Vec<PathBuf>,
 
+    #[clap(long, required = true, num_args = 1.., value_delimiter = ',')]
+    watch_saves: Vec<PathBuf>,
+
     #[arg(long)]
     hold_screenshots: PathBuf,
+
+    #[arg(long)]
+    hold_saves: PathBuf,
+
+    #[arg(long)]
+    keep_saves: PathBuf,
 
     #[arg(long)]
     led_path: PathBuf,
@@ -66,47 +79,68 @@ async fn main() -> Result<()> {
             args.hold_screenshots
         ));
     }
+    if !args.hold_saves.is_dir() {
+        return Err(anyhow!("hold-saves {:?} not a directory", args.hold_saves));
+    }
+    if !args.keep_saves.is_dir() {
+        return Err(anyhow!("keep-saves {:?} not a directory", args.keep_saves));
+    }
 
     let (server, server_tx) = server::prepare();
-    let (watcher, watcher_tx) = watcher::prepare();
+    let (screenshot_watcher, screenshot_watcher_tx) = watcher::prepare();
+    let (save_watcher, save_watcher_tx) = watcher::prepare();
     let (orchestrator, orchestrator_tx) = orchestrator::prepare();
     let (intake, intake_tx) = intake::prepare();
     let (screenshots, screenshots_tx) = screenshots::prepare();
+    let (saves, saves_tx) = saves::prepare();
     let (notify, notify_tx) = notify::prepare();
 
     let dbh =
         database::connect(args.plays_database, args.games_database, notify_tx.clone()).await?;
 
     let server = server.start(&listen, orchestrator_tx.clone(), notify_tx.clone());
-    let watcher = watcher.start(
+    let screenshot_watcher = screenshot_watcher.start(
         &args.watch_screenshots,
         watcher::WatchTarget::Screenshots,
+        orchestrator_tx.clone(),
+        notify_tx.clone(),
+    );
+    let save_watcher = save_watcher.start(
+        &args.watch_saves,
+        watcher::WatchTarget::SaveFiles,
         orchestrator_tx.clone(),
         notify_tx.clone(),
     );
     let orchestrator = orchestrator.start(
         dbh,
         args.hold_screenshots,
+        args.hold_saves,
+        args.keep_saves,
         &args.watch_screenshots,
         args.trim_game_prefix,
         intake_tx,
         screenshots_tx,
-        watcher_tx,
+        saves_tx,
+        screenshot_watcher_tx,
+        save_watcher_tx,
         server_tx,
         notify_tx.clone(),
     );
     let intake = intake.start(orchestrator_tx.clone(), notify_tx.clone(), args.intake_url);
     let screenshots =
         screenshots.start(notify_tx.clone(), args.screenshot_url, args.extra_directory);
+    let saves = saves.start(notify_tx.clone(), args.save_url);
     let notify = notify.start(args.led_path.clone());
     let signal = shutdown_signal(orchestrator_tx);
 
     let res = try_join!(
         server,
-        watcher,
+        screenshot_watcher,
+        save_watcher,
         orchestrator,
         intake,
         screenshots,
+        saves,
         notify,
         signal
     )
