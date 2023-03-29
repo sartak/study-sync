@@ -149,8 +149,6 @@ impl Intake {
                         intake_id,
                         end_time,
                     } => {
-                        self.play_to_intake.remove(play_id);
-
                         let submitted_end = match self.finish_intake(intake_id, *end_time).await {
                             Ok(e) => e,
                             Err(e) => {
@@ -161,6 +159,8 @@ impl Intake {
                                 continue;
                             }
                         };
+
+                        self.play_to_intake.remove(play_id);
 
                         let msg = orchestrator::Event::IntakeEnded {
                             play_id: *play_id,
@@ -180,7 +180,7 @@ impl Intake {
                         end_time,
                     } => {
                         let msg;
-                        if let Some(intake_id) = self.play_to_intake.remove(play_id) {
+                        if let Some(intake_id) = self.play_to_intake.get(play_id) {
                             let submitted_end =
                                 match self.finish_intake(&intake_id, *end_time).await {
                                     Ok(e) => e,
@@ -193,6 +193,8 @@ impl Intake {
                                         continue;
                                     }
                                 };
+
+                            self.play_to_intake.remove(play_id);
 
                             msg = orchestrator::Event::IntakeEnded {
                                 play_id: *play_id,
