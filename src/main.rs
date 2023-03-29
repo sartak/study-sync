@@ -79,7 +79,7 @@ async fn main() -> Result<()> {
 
     let server = server.start(&listen, orchestrator_tx.clone(), notify_tx.clone());
     let watch = watch.start(
-        args.watch_screenshots.clone(),
+        &args.watch_screenshots,
         watch::WatchTarget::Screenshots,
         orchestrator_tx.clone(),
         notify_tx.clone(),
@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
     let orchestrator = orchestrator.start(
         dbh,
         args.hold_screenshots,
-        args.watch_screenshots,
+        &args.watch_screenshots,
         args.trim_game_prefix,
         intake_tx,
         screenshots_tx,

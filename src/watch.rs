@@ -39,14 +39,15 @@ pub fn prepare() -> (WatchPre, mpsc::UnboundedSender<Event>) {
 impl WatchPre {
     pub async fn start(
         self,
-        paths: Vec<PathBuf>,
+        paths: &[PathBuf],
         target: WatchTarget,
         orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
         notify_tx: mpsc::UnboundedSender<notify::Event>,
     ) -> Result<()> {
         let (fs_tx, fs_rx) = mpsc::unbounded_channel();
 
-        tokio::spawn(async move { fs::launch(paths, fs_tx).await });
+        let paths = paths.to_owned();
+        tokio::spawn(async move { fs::launch(&paths, fs_tx).await });
 
         let watch = Watch {
             rx: self.rx,

@@ -11,13 +11,13 @@ use notify::{
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 
-pub async fn launch<P>(paths: Vec<P>, tx: mpsc::UnboundedSender<PathBuf>) -> Result<()>
+pub async fn launch<P>(paths: &[P], tx: mpsc::UnboundedSender<PathBuf>) -> Result<()>
 where
     P: AsRef<std::path::Path> + std::fmt::Debug + Send,
 {
     let (mut watcher, mut rx) = async_watcher()?;
 
-    for path in &paths {
+    for path in paths {
         watcher
             .watch(path.as_ref(), RecursiveMode::NonRecursive)
             .with_context(|| format!("watching path {path:?}"))?;

@@ -88,7 +88,7 @@ impl OrchestratorPre {
         self,
         database: Database,
         hold_screenshots: PathBuf,
-        watch_screenshots: Vec<PathBuf>,
+        watch_screenshots: &[PathBuf],
         trim_game_prefix: Option<String>,
         intake_tx: mpsc::UnboundedSender<intake::Event>,
         screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
@@ -146,11 +146,12 @@ impl OrchestratorPre {
     fn upload_extra_screenshots(
         &self,
         hold_screenshots: &Path,
-        watch_screenshots: Vec<PathBuf>,
+        watch_screenshots: &[PathBuf],
         screenshots_tx: &mpsc::UnboundedSender<screenshots::Event>,
     ) {
         let extra_directory = hold_screenshots.join("extra/");
         let screenshots_tx = screenshots_tx.clone();
+        let watch_screenshots = watch_screenshots.to_owned();
 
         tokio::spawn(async move {
             for dir in watch_screenshots {
