@@ -9,7 +9,7 @@ mod watch;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use log::{error, info};
-use std::{path::PathBuf, process};
+use std::{path::Path, path::PathBuf, process};
 use tokio::{select, signal, sync::mpsc, try_join};
 
 #[derive(Parser, Debug)]
@@ -55,16 +55,16 @@ async fn main() -> Result<()> {
         .filter_level(args.verbose.log_level_filter())
         .init();
 
+    if !args.led_path.is_file() {
+        return Err(anyhow!("led-path {:?} not a file", args.led_path));
+    }
+
     let listen = args.listen.parse()?;
     if !args.hold_screenshots.is_dir() {
         return Err(anyhow!(
             "hold-screenshots {:?} not a directory",
             args.hold_screenshots
         ));
-    }
-
-    if !args.led_path.is_file() {
-        return Err(anyhow!("led-path {:?} not a file", args.led_path));
     }
 
     let (server, server_tx) = server::launch();
@@ -74,7 +74,8 @@ async fn main() -> Result<()> {
     let (screenshots, screenshots_tx) = screenshots::launch();
     let (notify, notify_tx) = notify::launch();
 
-    let dbh = database::connect(args.plays_database, args.games_database, notify_tx).await?;
+    let dbh =
+        database::connect(args.plays_database, args.games_database, notify_tx.clone()).await?;
 
     let server = server.start(&listen, orchestrator_tx.clone(), notify_tx.clone());
     let watch = watch.start(
@@ -97,10 +98,10 @@ async fn main() -> Result<()> {
     let intake = intake.start(orchestrator_tx.clone(), notify_tx.clone(), args.intake_url);
     let screenshots =
         screenshots.start(notify_tx.clone(), args.screenshot_url, args.extra_directory);
-    let notify = notify.start(args.led_path);
+    let notify = notify.start(args.led_path.clone());
     let signal = shutdown_signal(orchestrator_tx);
 
-    try_join!(
+    let res = try_join!(
         server,
         watch,
         orchestrator,
@@ -109,7 +110,27 @@ async fn main() -> Result<()> {
         notify,
         signal
     )
-    .map(|_| ())
+    .map(|_| ());
+
+    if let Err(e) = &res {
+        emergency(format!("fatal error: {e:?}"), &args.led_path, notify_tx).await;
+    }
+
+    res
+}
+
+async fn emergency(
+    message: String,
+    led_path: &Path,
+    notify_tx: mpsc::UnboundedSender<notify::Event>,
+) {
+    error!("Emergency: {message:?}");
+
+    if notify_tx.is_closed() {
+        notify::blink_emergency(led_path).await;
+    } else if let Err(e) = notify_tx.send(notify::Event::Emergency(message)) {
+        error!("Could not send to notify: {e:?}");
+    }
 }
 
 async fn shutdown_signal(

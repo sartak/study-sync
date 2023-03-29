@@ -5,7 +5,7 @@ use crate::{
     orchestrator,
 };
 use anyhow::{anyhow, Result};
-use log::{error, info};
+use log::info;
 use std::path::PathBuf;
 use tokio::{select, sync::mpsc};
 
