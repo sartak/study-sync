@@ -657,7 +657,7 @@ impl Orchestrator {
     }
 
     fn screenshot_dir(&self) -> Option<PathBuf> {
-        self.current_play
+        self.playing()
             .as_ref()
             .map(|p| self.pending_screenshots.join(&p.game.directory))
     }
