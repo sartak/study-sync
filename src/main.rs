@@ -46,10 +46,10 @@ struct Args {
     watch_saves: Vec<PathBuf>,
 
     #[arg(long)]
-    hold_screenshots: PathBuf,
+    pending_screenshots: PathBuf,
 
     #[arg(long)]
-    hold_saves: PathBuf,
+    pending_saves: PathBuf,
 
     #[arg(long)]
     keep_saves: PathBuf,
@@ -73,14 +73,17 @@ async fn main() -> Result<()> {
     }
 
     let listen = args.listen.parse()?;
-    if !args.hold_screenshots.is_dir() {
+    if !args.pending_screenshots.is_dir() {
         return Err(anyhow!(
-            "hold-screenshots {:?} not a directory",
-            args.hold_screenshots
+            "pending-screenshots {:?} not a directory",
+            args.pending_screenshots
         ));
     }
-    if !args.hold_saves.is_dir() {
-        return Err(anyhow!("hold-saves {:?} not a directory", args.hold_saves));
+    if !args.pending_saves.is_dir() {
+        return Err(anyhow!(
+            "pending-saves {:?} not a directory",
+            args.pending_saves
+        ));
     }
     if !args.keep_saves.is_dir() {
         return Err(anyhow!("keep-saves {:?} not a directory", args.keep_saves));
@@ -113,8 +116,8 @@ async fn main() -> Result<()> {
     );
     let orchestrator = orchestrator.start(
         dbh,
-        args.hold_screenshots,
-        args.hold_saves,
+        args.pending_screenshots,
+        args.pending_saves,
         args.keep_saves,
         &args.watch_screenshots,
         args.trim_game_prefix,

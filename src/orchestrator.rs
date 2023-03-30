@@ -76,8 +76,8 @@ pub struct Orchestrator {
     save_watcher_tx: mpsc::UnboundedSender<watcher::Event>,
     server_tx: mpsc::UnboundedSender<server::Event>,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
-    hold_screenshots: PathBuf,
-    hold_saves: PathBuf,
+    pending_screenshots: PathBuf,
+    pending_saves: PathBuf,
     keep_saves: PathBuf,
     trim_game_prefix: Option<String>,
     database: Database,
@@ -94,8 +94,8 @@ impl OrchestratorPre {
     pub async fn start(
         self,
         database: Database,
-        hold_screenshots: PathBuf,
-        hold_saves: PathBuf,
+        pending_screenshots: PathBuf,
+        pending_saves: PathBuf,
         keep_saves: PathBuf,
         watch_screenshots: &[PathBuf],
         trim_game_prefix: Option<String>,
@@ -107,9 +107,9 @@ impl OrchestratorPre {
         server_tx: mpsc::UnboundedSender<server::Event>,
         notify_tx: mpsc::UnboundedSender<notify::Event>,
     ) -> Result<()> {
-        self.upload_existing_screenshots(&hold_screenshots, &screenshots_tx)?;
-        self.upload_extra_screenshots(&hold_screenshots, watch_screenshots, &screenshots_tx);
-        self.upload_existing_saves(&hold_saves, &saves_tx)?;
+        self.upload_existing_screenshots(&pending_screenshots, &screenshots_tx)?;
+        self.upload_extra_screenshots(&pending_screenshots, watch_screenshots, &screenshots_tx);
+        self.upload_existing_saves(&pending_saves, &saves_tx)?;
 
         let previous = self.load_backlog(&database, &intake_tx).await?;
 
@@ -122,8 +122,8 @@ impl OrchestratorPre {
             save_watcher_tx,
             server_tx,
             notify_tx,
-            hold_screenshots,
-            hold_saves,
+            pending_screenshots,
+            pending_saves,
             keep_saves,
             trim_game_prefix,
             database,
@@ -135,10 +135,10 @@ impl OrchestratorPre {
 
     fn upload_existing_screenshots(
         &self,
-        hold_screenshots: &Path,
+        pending_screenshots: &Path,
         screenshots_tx: &mpsc::UnboundedSender<screenshots::Event>,
     ) -> Result<()> {
-        for entry in walkdir::WalkDir::new(hold_screenshots)
+        for entry in walkdir::WalkDir::new(pending_screenshots)
             .sort_by_file_name()
             .min_depth(3)
             .into_iter()
@@ -148,7 +148,7 @@ impl OrchestratorPre {
             let path = entry.into_path();
             let mut directory = path.clone();
             directory.pop();
-            let directory = directory.strip_prefix(hold_screenshots)?;
+            let directory = directory.strip_prefix(pending_screenshots)?;
             info!("Found batched screenshot {path:?} for {directory:?}");
             if let Some(directory) = directory.to_str() {
                 let event = screenshots::Event::UploadScreenshot(path, directory.to_owned());
@@ -161,10 +161,10 @@ impl OrchestratorPre {
 
     fn upload_existing_saves(
         &self,
-        hold_saves: &Path,
+        pending_saves: &Path,
         saves_tx: &mpsc::UnboundedSender<saves::Event>,
     ) -> Result<()> {
-        for entry in walkdir::WalkDir::new(hold_saves)
+        for entry in walkdir::WalkDir::new(pending_saves)
             .sort_by_file_name()
             .into_iter()
             .filter_map(Result::ok)
@@ -173,7 +173,7 @@ impl OrchestratorPre {
             let path = entry.into_path();
             let mut directory = path.clone();
             directory.pop();
-            let directory = directory.strip_prefix(hold_saves)?;
+            let directory = directory.strip_prefix(pending_saves)?;
 
             let event = match directory.extension().map(|s| s.to_str()) {
                 Some(Some("png" | "jpg")) => {
@@ -194,11 +194,11 @@ impl OrchestratorPre {
 
     fn upload_extra_screenshots(
         &self,
-        hold_screenshots: &Path,
+        pending_screenshots: &Path,
         watch_screenshots: &[PathBuf],
         screenshots_tx: &mpsc::UnboundedSender<screenshots::Event>,
     ) {
-        let extra_directory = hold_screenshots.join("extra/");
+        let extra_directory = pending_screenshots.join("extra/");
         let screenshots_tx = screenshots_tx.clone();
         let watch_screenshots = watch_screenshots.to_owned();
 
@@ -279,8 +279,8 @@ impl OrchestratorPre {
 
 impl Orchestrator {
     pub async fn start(mut self) -> Result<()> {
-        let extra_directory = self.hold_screenshots.join("extra/");
-        let latest_screenshot = self.hold_screenshots.join("latest.png");
+        let extra_directory = self.pending_screenshots.join("extra/");
+        let latest_screenshot = self.pending_screenshots.join("latest.png");
 
         while let Some(event) = self.rx.recv().await {
             info!("Handling {event:?}");
@@ -345,23 +345,23 @@ impl Orchestrator {
 
                     let screenshot_dir = self.screenshot_dir().unwrap();
 
-                    let mut hold_save_dir = self.hold_saves.join(path);
-                    hold_save_dir.set_extension("");
+                    let mut pending_save_dir = self.pending_saves.join(path);
+                    pending_save_dir.set_extension("");
 
                     let mut keep_save_dir = self.keep_saves.join(path);
                     keep_save_dir.set_extension("");
 
-                    let (screenshot_dir_res, hold_save_dir_res, keep_save_dir_res) = join!(
+                    let (screenshot_dir_res, pending_save_dir_res, keep_save_dir_res) = join!(
                         create_dir_all(&screenshot_dir),
-                        create_dir_all(&hold_save_dir),
+                        create_dir_all(&pending_save_dir),
                         create_dir_all(&keep_save_dir)
                     );
                     if let Err(e) = screenshot_dir_res {
                         self.notify_error(&format!("Could not create {screenshot_dir:?}: {e:?}"));
                         continue;
                     }
-                    if let Err(e) = hold_save_dir_res {
-                        self.notify_error(&format!("Could not create {hold_save_dir:?}: {e:?}"));
+                    if let Err(e) = pending_save_dir_res {
+                        self.notify_error(&format!("Could not create {pending_save_dir:?}: {e:?}"));
                         continue;
                     }
                     if let Err(e) = keep_save_dir_res {
@@ -485,24 +485,29 @@ impl Orchestrator {
                     let mut target = directory.join(self.now_ymd());
                     target.set_extension(extension);
 
-                    let hold_save_destination = self.hold_saves.join(&target);
+                    let pending_save_destination = self.pending_saves.join(&target);
                     let keep_save_destination = self.keep_saves.join(&target);
 
-                    let mut hold_screenshot_destination = hold_save_destination.clone();
+                    let mut pending_screenshot_destination = pending_save_destination.clone();
                     let mut keep_screenshot_destination = keep_save_destination.clone();
-                    hold_screenshot_destination.set_extension("png");
+                    pending_screenshot_destination.set_extension("png");
                     keep_screenshot_destination.set_extension("png");
 
-                    let (hold_save_res, keep_save_res, hold_screenshot_res, keep_screenshot_res) = join!(
-                        hard_link(&path, &hold_save_destination),
+                    let (
+                        pending_save_res,
+                        keep_save_res,
+                        pending_screenshot_res,
+                        keep_screenshot_res,
+                    ) = join!(
+                        hard_link(&path, &pending_save_destination),
                         hard_link(&path, &keep_save_destination),
-                        hard_link(&latest_screenshot, &hold_screenshot_destination),
+                        hard_link(&latest_screenshot, &pending_screenshot_destination),
                         hard_link(&latest_screenshot, &keep_screenshot_destination),
                     );
 
-                    if let Err(e) = hold_save_res {
+                    if let Err(e) = pending_save_res {
                         self.notify_error(&format!(
-                            "Could not hardlink save {path:?} to {hold_save_destination:?}: {e:?}"
+                            "Could not hardlink save {path:?} to {pending_save_destination:?}: {e:?}"
                         ));
                         continue;
                     }
@@ -520,21 +525,24 @@ impl Orchestrator {
                         ));
                     }
 
-                    if let Err(e) = &hold_screenshot_res {
+                    if let Err(e) = &pending_screenshot_res {
                         self.notify_error(&format!(
-                            "Could not hardlink screenshot {latest_screenshot:?} to {hold_screenshot_destination:?}: {e:?}"
+                            "Could not hardlink screenshot {latest_screenshot:?} to {pending_screenshot_destination:?}: {e:?}"
                         ));
                     }
 
-                    let event = saves::Event::UploadSave(hold_save_destination, directory.clone());
+                    let event =
+                        saves::Event::UploadSave(pending_save_destination, directory.clone());
                     if let Err(e) = self.saves_tx.send(event) {
                         self.notify_error(&format!("Could not send to saves: {e:?}"));
                         continue;
                     }
 
-                    if hold_screenshot_res.is_ok() {
-                        let event =
-                            saves::Event::UploadScreenshot(hold_screenshot_destination, directory);
+                    if pending_screenshot_res.is_ok() {
+                        let event = saves::Event::UploadScreenshot(
+                            pending_screenshot_destination,
+                            directory,
+                        );
                         if let Err(e) = self.saves_tx.send(event) {
                             self.notify_error(&format!("Could not send to saves: {e:?}"));
                             continue;
@@ -651,7 +659,7 @@ impl Orchestrator {
     fn screenshot_dir(&self) -> Option<PathBuf> {
         self.current_play
             .as_ref()
-            .map(|p| self.hold_screenshots.join(&p.game.directory))
+            .map(|p| self.pending_screenshots.join(&p.game.directory))
     }
 
     fn set_current_play(&mut self, play: Option<Play>) {
