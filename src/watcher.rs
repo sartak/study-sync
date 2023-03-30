@@ -7,7 +7,7 @@ use crate::{
 use anyhow::{anyhow, Result};
 use log::info;
 use regex::Regex;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::{select, sync::mpsc};
 
 #[derive(Debug)]
@@ -15,6 +15,7 @@ pub enum Event {
     StartShutdown,
 }
 
+#[derive(PartialEq)]
 pub enum WatchTarget {
     Screenshots,
     SaveFiles,
@@ -47,8 +48,10 @@ impl WatcherPre {
     ) -> Result<()> {
         let (fs_tx, fs_rx) = mpsc::unbounded_channel();
 
-        let paths = paths.to_owned();
-        tokio::spawn(async move { fs::launch(&paths, fs_tx).await });
+        {
+            let paths = paths.to_owned();
+            tokio::spawn(async move { fs::launch(&paths, fs_tx).await });
+        }
 
         let watcher = Watcher {
             rx: self.rx,
@@ -57,14 +60,30 @@ impl WatcherPre {
             orchestrator_tx,
             notify_tx,
         };
+
+        if watcher.target == WatchTarget::Screenshots {
+            for dir in paths {
+                watcher.check_directory(dir);
+            }
+        }
+
         watcher.start().await
     }
 }
 
 impl Watcher {
-    pub async fn start(mut self) -> Result<()> {
-        let pattern = self.target.file_pattern();
+    pub fn check_directory(&self, directory: &Path) {
+        for entry in walkdir::WalkDir::new(directory)
+            .sort_by_file_name()
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+        {
+            self.maybe_emit(entry.into_path());
+        }
+    }
 
+    pub async fn start(mut self) -> Result<()> {
         loop {
             select! {
                 msg = self.rx.recv() => {
@@ -77,20 +96,7 @@ impl Watcher {
                 msg = self.fs_rx.recv() => {
                     match msg {
                         Some(path) => {
-                            info!("Handling path {path:?}");
-
-                            match path.to_str() {
-                                Some(p) if pattern.is_match(p) => {},
-                                _ => continue,
-                            };
-
-                            let event = match self.target {
-                                WatchTarget::Screenshots => orchestrator::Event::ScreenshotCreated(path),
-                                WatchTarget::SaveFiles => orchestrator::Event::SaveFileCreated(path),
-                            };
-                            if let Err(e) = self.orchestrator_tx.send(event) {
-                                self.notify_error(&format!("Failed to send to orchestrator: {e:?}"));
-                            }
+                            self.maybe_emit(path);
                         },
                         None => {
                             return Err(anyhow!("filesystem watcher channel unexpectedly closed"));
@@ -106,6 +112,24 @@ impl Watcher {
         };
 
         Ok(())
+    }
+
+    fn maybe_emit(&self, path: PathBuf) {
+        let pattern = self.target.file_pattern();
+
+        match path.to_str() {
+            Some(p) if pattern.is_match(p) => {}
+            _ => return,
+        };
+        info!("Handling path {path:?}");
+
+        let event = match self.target {
+            WatchTarget::Screenshots => orchestrator::Event::ScreenshotCreated(path),
+            WatchTarget::SaveFiles => orchestrator::Event::SaveFileCreated(path),
+        };
+        if let Err(e) = self.orchestrator_tx.send(event) {
+            self.notify_error(&format!("Failed to send to orchestrator: {e:?}"));
+        }
     }
 }
 
