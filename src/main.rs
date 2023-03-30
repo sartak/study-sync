@@ -10,7 +10,7 @@ mod watcher;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use log::{error, info};
-use std::{path::Path, path::PathBuf, process};
+use std::{iter, path::Path, path::PathBuf, process};
 use tokio::{select, signal, sync::mpsc, try_join};
 
 #[derive(Parser, Debug)]
@@ -73,20 +73,22 @@ async fn main() -> Result<()> {
     }
 
     let listen = args.listen.parse()?;
-    if !args.pending_screenshots.is_dir() {
-        return Err(anyhow!(
-            "pending-screenshots {:?} not a directory",
-            args.pending_screenshots
-        ));
-    }
-    if !args.pending_saves.is_dir() {
-        return Err(anyhow!(
-            "pending-saves {:?} not a directory",
-            args.pending_saves
-        ));
-    }
-    if !args.keep_saves.is_dir() {
-        return Err(anyhow!("keep-saves {:?} not a directory", args.keep_saves));
+
+    for (flag, path) in args
+        .watch_screenshots
+        .iter()
+        .map(|d| ("--watch-screenshots", d))
+        .chain(args.watch_saves.iter().map(|d| ("--watch-saves", d)))
+        .chain(iter::once((
+            "--pending-screenshots",
+            &args.pending_screenshots,
+        )))
+        .chain(iter::once(("--pending-saves", &args.pending_saves)))
+        .chain(iter::once(("--keep-saves", &args.keep_saves)))
+    {
+        if !path.is_dir() {
+            return Err(anyhow!("{flag:?} {path:?} is not a directory"));
+        }
     }
 
     let (server, server_tx) = server::prepare();
