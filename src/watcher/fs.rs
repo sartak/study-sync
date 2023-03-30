@@ -29,29 +29,25 @@ where
             Ok(event) => {
                 debug!("file change: {:?}", event);
 
-                if event.paths.is_empty() {
-                    continue;
+                for path in event.paths {
+                    let event = match event.kind {
+                        // create file outside directory, move it in
+                        // EventKind::Create(CreateKind::File) => Event::FileSaved(path),
+
+                        // move file within directory
+                        // EventKind::Modify(ModifyKind::Name(RenameMode::To)) => Event::FileSaved(path),
+
+                        // rm file
+                        // EventKind::Remove(RemoveKind::File) => Event::FileRemoved(path),
+
+                        // create file in directory
+                        EventKind::Access(AccessKind::Close(AccessMode::Write)) => path,
+
+                        _ => continue,
+                    };
+
+                    tx.send(event)?
                 }
-
-                let mut paths = event.paths;
-                let path = paths.swap_remove(0);
-
-                let event = match event.kind {
-                    // create file in directory
-                    EventKind::Access(AccessKind::Close(AccessMode::Write)) => path,
-
-                    // create file outside directory, move it in
-                    // EventKind::Create(CreateKind::File) => Event::FileSaved(path),
-
-                    // move file within directory
-                    // EventKind::Modify(ModifyKind::Name(RenameMode::To)) => Event::FileSaved(path),
-
-                    // rm file
-                    // EventKind::Remove(RemoveKind::File) => Event::FileRemoved(path),
-                    _ => continue,
-                };
-
-                tx.send(event)?
             }
             Err(e) => return Err(anyhow!(e)),
         }
