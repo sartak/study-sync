@@ -12,6 +12,7 @@ lto = "fat"
 
 [dependencies]
 anyhow = "1.0.70"
+async-trait = "0.1.68"
 axum = "0.6.11"
 clap = { version = "4.1.11", features = ["derive"] }
 clap-verbosity-flag = "2.0.0"
