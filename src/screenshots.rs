@@ -1,5 +1,6 @@
 use crate::notify::{self, Notifier};
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use log::{error, info};
 use reqwest::Body;
 use sha1::{Digest, Sha1};
@@ -78,7 +79,7 @@ impl Screenshots {
             } else if let Some(event) = self.buffer.pop_front() {
                 match &event {
                     Event::UploadScreenshot(path, directory) => {
-                        if let Err(e) = self.upload_path_to_directory(path, directory).await {
+                        if let Err(e) = self.upload_screenshot(path, directory).await {
                             error!("Could not upload {path:?}: {e:?}");
                             self.buffer.push_front(event);
                             info!("Sleeping for 5s before trying again");
@@ -98,7 +99,7 @@ impl Screenshots {
 
                     Event::UploadExtra(path) => {
                         let directory = self.extra_directory.clone();
-                        if let Err(e) = self.upload_path_to_directory(path, &directory).await {
+                        if let Err(e) = self.upload_screenshot(path, &directory).await {
                             error!("Could not upload {path:?}: {e:?}");
                             self.buffer.push_front(event);
                             info!("Sleeping for 5s before trying again");
@@ -122,10 +123,43 @@ impl Screenshots {
         Ok(())
     }
 
+    async fn upload_screenshot(&mut self, path: &Path, directory: &str) -> Result<()> {
+        let extension = path
+            .extension()
+            .and_then(std::ffi::OsStr::to_str)
+            .unwrap_or("png");
+
+        let content_type = if extension == "jpg" {
+            "image/jpeg"
+        } else {
+            "image/png"
+        };
+
+        let url = self.screenshot_url.clone();
+        self.upload_path_to_directory(&url, path, directory, Some(content_type))
+            .await
+    }
+}
+
+impl Notifier for Screenshots {
+    fn notify_target(&self) -> &str {
+        "study_sync::screenshots"
+    }
+
+    fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
+        &self.notify_tx
+    }
+}
+
+#[async_trait]
+pub trait Uploader: Notifier + Send {
+    fn get_digest_cache(&self) -> &Option<(PathBuf, String)>;
+    fn set_digest_cache(&mut self, cache: Option<(PathBuf, String)>);
+
     async fn digest_for_path(&mut self, path: &Path) -> Option<String> {
-        if let Some((p, digest)) = &self.digest_cache {
+        if let Some((p, d)) = self.get_digest_cache() {
             if p == path {
-                return Some(digest.clone());
+                return Some(d.clone());
             }
         }
 
@@ -142,7 +176,7 @@ impl Screenshots {
 
         match res {
             Ok(Ok(digest)) => {
-                self.digest_cache = Some((path.to_owned(), digest.clone()));
+                self.set_digest_cache(Some((path.to_path_buf(), digest.clone())));
                 Some(digest)
             }
             Ok(Err(e)) => {
@@ -158,26 +192,22 @@ impl Screenshots {
         }
     }
 
-    async fn upload_path_to_directory(&mut self, path: &Path, directory: &str) -> Result<()> {
-        let mut url = format!("{}/{directory}", self.screenshot_url);
+    async fn upload_path_to_directory(
+        &mut self,
+        base_url: &str,
+        path: &Path,
+        directory: &str,
+        content_type: Option<&str>,
+    ) -> Result<()> {
+        let mut url = format!("{base_url}/{directory}");
 
         let basename = path
             .file_name()
             .and_then(std::ffi::OsStr::to_str)
             .unwrap_or("");
-        let extension = path
-            .extension()
-            .and_then(std::ffi::OsStr::to_str)
-            .unwrap_or("png");
-
-        let content_type = if extension == "jpg" {
-            "image/jpeg"
-        } else {
-            "image/png"
-        };
 
         if let Some(digest) = self.digest_for_path(path).await {
-            let param = format!("?screenshot_digest={digest}");
+            let param = format!("?digest={digest}");
             url.push_str(&param);
         }
 
@@ -188,13 +218,16 @@ impl Screenshots {
         let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(30));
         let client = builder.build()?;
 
-        let res = client
+        let mut req = client
             .post(&url)
-            .header(reqwest::header::CONTENT_TYPE, content_type)
             .header("X-Study-Basename", basename)
-            .body(body)
-            .send()
-            .await?;
+            .body(body);
+
+        if let Some(content_type) = content_type {
+            req = req.header(reqwest::header::CONTENT_TYPE, content_type);
+        }
+
+        let res = req.send().await?;
 
         if !res.status().is_success() {
             return Err(anyhow!(
@@ -210,12 +243,12 @@ impl Screenshots {
     }
 }
 
-impl Notifier for Screenshots {
-    fn notify_target(&self) -> &str {
-        "study_sync::screenshots"
+impl Uploader for Screenshots {
+    fn get_digest_cache(&self) -> &Option<(PathBuf, String)> {
+        &self.digest_cache
     }
 
-    fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
-        &self.notify_tx
+    fn set_digest_cache(&mut self, cache: Option<(PathBuf, String)>) {
+        self.digest_cache = cache;
     }
 }
