@@ -2,12 +2,13 @@ study-sync is a service designed to run alongside [RetroArch](https://www.retroa
 
 - Track game start and end times and sync them to an external service ("intake"). Big fan of Quantified Self
 - Sync all screenshots, organized by game, to an external service ("study"). I [turn these](https://shawn.dev/2022/03/one-million-anki-reviews.html) into [Anki](https://apps.ankiweb.net) flashcards
-- Sync all save states and save files, each bundled with the latest screenshot for identification, to an external service ("saves")
+- Sync all save states and save files, each bundled with the latest screenshot for identification, to an external service ("saves"). Also keeps them locally so I can time travel to any save
+- Notify player of progress and errors by blinking the device's LED
 - Allow restarting study-sync, or the entire device, without losing any state; including graceful shutdown on SIGTERM/ctrl-c
 - Fully tolerate being offline (or on an unreliable connection) for extended periods, and automatically sync everything when back online
-- Notify player of progress and errors by blinking the device's LED
+- Tries to be efficient and so does not copy files; instead, manages hardlinks
 
-It's written in async Rust. The various components are:
+It's written in async Rust where each component has its own "thread". The components are:
 
 - `orchestrator` is the event dispatcher
 - `server` creates an HTTP listener to receive events from RetroArch and the operating system
