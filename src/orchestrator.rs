@@ -97,7 +97,6 @@ impl OrchestratorPre {
         pending_screenshots: PathBuf,
         pending_saves: PathBuf,
         keep_saves: PathBuf,
-        watch_screenshots: &[PathBuf],
         trim_game_prefix: Option<String>,
         intake_tx: mpsc::UnboundedSender<intake::Event>,
         screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
@@ -108,7 +107,7 @@ impl OrchestratorPre {
         notify_tx: mpsc::UnboundedSender<notify::Event>,
     ) -> Result<()> {
         self.upload_existing_screenshots(&pending_screenshots, &screenshots_tx)?;
-        self.upload_extra_screenshots(&pending_screenshots, watch_screenshots, &screenshots_tx);
+        self.upload_extra_screenshots(&pending_screenshots, &screenshots_tx);
         self.upload_existing_saves(&pending_saves, &saves_tx)?;
 
         let previous = self.load_backlog(&database, &intake_tx).await?;
@@ -173,16 +172,16 @@ impl OrchestratorPre {
             let path = entry.into_path();
             let mut directory = path.clone();
             directory.pop();
-            let directory = directory.strip_prefix(pending_saves)?;
+            let directory = directory.strip_prefix(pending_saves)?.to_owned();
 
-            let event = match directory.extension().map(|s| s.to_str()) {
+            let event = match path.extension().map(|s| s.to_str()) {
                 Some(Some("png" | "jpg")) => {
                     info!("Found batched screenshot {path:?} for {directory:?}");
-                    saves::Event::UploadScreenshot(path, directory.to_owned())
+                    saves::Event::UploadScreenshot(path, directory)
                 }
                 Some(Some(_)) => {
                     info!("Found batched save {path:?} for {directory:?}");
-                    saves::Event::UploadSave(path, directory.to_owned())
+                    saves::Event::UploadSave(path, directory)
                 }
                 _ => continue,
             };
@@ -195,29 +194,12 @@ impl OrchestratorPre {
     fn upload_extra_screenshots(
         &self,
         pending_screenshots: &Path,
-        watch_screenshots: &[PathBuf],
         screenshots_tx: &mpsc::UnboundedSender<screenshots::Event>,
     ) {
         let extra_directory = pending_screenshots.join("extra/");
         let screenshots_tx = screenshots_tx.clone();
-        let watch_screenshots = watch_screenshots.to_owned();
 
         tokio::spawn(async move {
-            for dir in watch_screenshots {
-                for entry in walkdir::WalkDir::new(dir)
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .filter(|e| e.file_type().is_file())
-                {
-                    let path = entry.into_path();
-                    info!("Moving extra screenshot {path:?} into {extra_directory:?}");
-                    let destination = extra_directory.join(path.file_name().unwrap());
-                    if let Err(e) = rename(&path, &destination).await {
-                        error!("Could not move screenshot {path:?} to {destination:?}: {e:?}");
-                    }
-                }
-            }
-
             for entry in walkdir::WalkDir::new(extra_directory)
                 .sort_by_file_name()
                 .into_iter()

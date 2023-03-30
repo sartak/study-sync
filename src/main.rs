@@ -121,7 +121,6 @@ async fn main() -> Result<()> {
         args.pending_screenshots,
         args.pending_saves,
         args.keep_saves,
-        &args.watch_screenshots,
         args.trim_game_prefix,
         intake_tx,
         screenshots_tx,
