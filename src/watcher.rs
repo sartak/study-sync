@@ -6,6 +6,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use log::info;
+use regex::Regex;
 use std::path::PathBuf;
 use tokio::{select, sync::mpsc};
 
@@ -62,6 +63,8 @@ impl WatcherPre {
 
 impl Watcher {
     pub async fn start(mut self) -> Result<()> {
+        let pattern = self.target.file_pattern();
+
         loop {
             select! {
                 msg = self.rx.recv() => {
@@ -75,6 +78,12 @@ impl Watcher {
                     match msg {
                         Some(path) => {
                             info!("Handling path {path:?}");
+
+                            match path.to_str() {
+                                Some(p) if pattern.is_match(p) => {},
+                                _ => continue,
+                            };
+
                             let event = match self.target {
                                 WatchTarget::Screenshots => orchestrator::Event::ScreenshotCreated(path),
                                 WatchTarget::SaveFiles => orchestrator::Event::SaveFileCreated(path),
@@ -93,6 +102,17 @@ impl Watcher {
 
         info!("watcher gracefully shut down");
         Ok(())
+    }
+}
+
+impl WatchTarget {
+    fn file_pattern(&self) -> Regex {
+        match self {
+            WatchTarget::Screenshots => Regex::new(r"\.(?:png|jpg)$").unwrap(),
+            WatchTarget::SaveFiles => {
+                Regex::new(r"\.(?:srm|state[0-9]*|state\.auto|sav|rtc|ldci)$").unwrap()
+            }
+        }
     }
 }
 
