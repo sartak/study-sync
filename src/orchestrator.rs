@@ -1,4 +1,6 @@
-use crate::{database::Database, intake, notify, notify::Notifier, screenshots, server, watch};
+use crate::{
+    database::Database, intake, notify, notify::Notifier, screenshots, server, watcher,
+};
 use anyhow::Result;
 use log::{error, info};
 use std::path::{Path, PathBuf};
@@ -68,7 +70,7 @@ pub struct Orchestrator {
     rx: mpsc::UnboundedReceiver<Event>,
     intake_tx: mpsc::UnboundedSender<intake::Event>,
     screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
-    watch_tx: mpsc::UnboundedSender<watch::Event>,
+    watcher_tx: mpsc::UnboundedSender<watcher::Event>,
     server_tx: mpsc::UnboundedSender<server::Event>,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
     hold_screenshots: PathBuf,
@@ -92,7 +94,7 @@ impl OrchestratorPre {
         trim_game_prefix: Option<String>,
         intake_tx: mpsc::UnboundedSender<intake::Event>,
         screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
-        watch_tx: mpsc::UnboundedSender<watch::Event>,
+        watcher_tx: mpsc::UnboundedSender<watcher::Event>,
         server_tx: mpsc::UnboundedSender<server::Event>,
         notify_tx: mpsc::UnboundedSender<notify::Event>,
     ) -> Result<()> {
@@ -105,7 +107,7 @@ impl OrchestratorPre {
             rx: self.rx,
             intake_tx,
             screenshots_tx,
-            watch_tx,
+            watcher_tx,
             server_tx,
             notify_tx,
             hold_screenshots,
@@ -473,8 +475,8 @@ impl Orchestrator {
                     if let Err(e) = self.screenshots_tx.send(screenshots::Event::StartShutdown) {
                         self.notify_error(&format!("Could not send to screenshots: {e:?}"));
                     }
-                    if let Err(e) = self.watch_tx.send(watch::Event::StartShutdown) {
-                        self.notify_error(&format!("Could not send to watch: {e:?}"));
+                    if let Err(e) = self.watcher_tx.send(watcher::Event::StartShutdown) {
+                        self.notify_error(&format!("Could not send to watcher: {e:?}"));
                     }
                     if let Err(e) = self.server_tx.send(server::Event::StartShutdown) {
                         self.notify_error(&format!("Could not send to server: {e:?}"));

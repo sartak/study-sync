@@ -19,11 +19,11 @@ pub enum WatchTarget {
     SaveFiles,
 }
 
-pub struct WatchPre {
+pub struct WatcherPre {
     rx: mpsc::UnboundedReceiver<Event>,
 }
 
-pub struct Watch {
+pub struct Watcher {
     rx: mpsc::UnboundedReceiver<Event>,
     fs_rx: mpsc::UnboundedReceiver<PathBuf>,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
@@ -31,12 +31,12 @@ pub struct Watch {
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
 }
 
-pub fn prepare() -> (WatchPre, mpsc::UnboundedSender<Event>) {
+pub fn prepare() -> (WatcherPre, mpsc::UnboundedSender<Event>) {
     let (tx, rx) = mpsc::unbounded_channel();
-    (WatchPre { rx }, tx)
+    (WatcherPre { rx }, tx)
 }
 
-impl WatchPre {
+impl WatcherPre {
     pub async fn start(
         self,
         paths: &[PathBuf],
@@ -49,18 +49,18 @@ impl WatchPre {
         let paths = paths.to_owned();
         tokio::spawn(async move { fs::launch(&paths, fs_tx).await });
 
-        let watch = Watch {
+        let watcher = Watcher {
             rx: self.rx,
             fs_rx,
             target,
             orchestrator_tx,
             notify_tx,
         };
-        watch.start().await
+        watcher.start().await
     }
 }
 
-impl Watch {
+impl Watcher {
     pub async fn start(mut self) -> Result<()> {
         loop {
             select! {
@@ -91,14 +91,14 @@ impl Watch {
             }
         }
 
-        info!("watch gracefully shut down");
+        info!("watcher gracefully shut down");
         Ok(())
     }
 }
 
-impl Notifier for Watch {
+impl Notifier for Watcher {
     fn notify_target(&self) -> &str {
-        "study_sync::watch"
+        "study_sync::watcher"
     }
 
     fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {

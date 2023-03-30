@@ -4,7 +4,7 @@ mod notify;
 mod orchestrator;
 mod screenshots;
 mod server;
-mod watch;
+mod watcher;
 
 use anyhow::{anyhow, Result};
 use clap::Parser;
@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
     }
 
     let (server, server_tx) = server::prepare();
-    let (watch, watch_tx) = watch::prepare();
+    let (watcher, watcher_tx) = watcher::prepare();
     let (orchestrator, orchestrator_tx) = orchestrator::prepare();
     let (intake, intake_tx) = intake::prepare();
     let (screenshots, screenshots_tx) = screenshots::prepare();
@@ -78,9 +78,9 @@ async fn main() -> Result<()> {
         database::connect(args.plays_database, args.games_database, notify_tx.clone()).await?;
 
     let server = server.start(&listen, orchestrator_tx.clone(), notify_tx.clone());
-    let watch = watch.start(
+    let watcher = watcher.start(
         &args.watch_screenshots,
-        watch::WatchTarget::Screenshots,
+        watcher::WatchTarget::Screenshots,
         orchestrator_tx.clone(),
         notify_tx.clone(),
     );
@@ -91,7 +91,7 @@ async fn main() -> Result<()> {
         args.trim_game_prefix,
         intake_tx,
         screenshots_tx,
-        watch_tx,
+        watcher_tx,
         server_tx,
         notify_tx.clone(),
     );
@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
 
     let res = try_join!(
         server,
-        watch,
+        watcher,
         orchestrator,
         intake,
         screenshots,

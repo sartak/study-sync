@@ -11,7 +11,7 @@ It's written in async Rust. The various components are:
 
 - `orchestrator` is the event dispatcher
 - `server` creates an HTTP listener to receive events from RetroArch and the operating system
-- `watch` watches the filesystem for new screenshots and saves
+- `watcher` watches the filesystem for new screenshots and saves
 - `database` uses SQLite to track game starts and ends, and sync status
 - `intake` syncs game starts and ends to an "intake" service
 - `screenshots` syncs screenshots to a "study" service
