@@ -1,4 +1,7 @@
-use crate::notify::{self, Notifier};
+use crate::{
+    notify::{self, Notifier},
+    orchestrator,
+};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use log::{error, info};
@@ -25,6 +28,7 @@ pub struct ScreenshotsPre {
 
 pub struct Screenshots {
     rx: mpsc::UnboundedReceiver<Event>,
+    orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
     screenshot_url: String,
     extra_directory: String,
@@ -41,6 +45,7 @@ pub fn prepare() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
 impl ScreenshotsPre {
     pub async fn start(
         self,
+        orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
         notify_tx: mpsc::UnboundedSender<notify::Event>,
         screenshot_url: String,
         extra_directory: String,
@@ -48,6 +53,7 @@ impl ScreenshotsPre {
     ) -> Result<()> {
         let screenshots = Screenshots {
             rx: self.rx,
+            orchestrator_tx,
             notify_tx,
             screenshot_url,
             extra_directory,

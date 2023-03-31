@@ -1,5 +1,6 @@
 use crate::{
     notify::{self, Notifier},
+    orchestrator,
     screenshots::Uploader,
 };
 use anyhow::Result;
@@ -23,6 +24,7 @@ pub struct SavesPre {
 
 pub struct Saves {
     rx: mpsc::UnboundedReceiver<Event>,
+    orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
     save_url: String,
     buffer: VecDeque<Event>,
@@ -38,12 +40,14 @@ pub fn prepare() -> (SavesPre, mpsc::UnboundedSender<Event>) {
 impl SavesPre {
     pub async fn start(
         self,
+        orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
         notify_tx: mpsc::UnboundedSender<notify::Event>,
         save_url: String,
         is_online: bool,
     ) -> Result<()> {
         let saves = Saves {
             rx: self.rx,
+            orchestrator_tx,
             notify_tx,
             save_url,
             buffer: VecDeque::new(),

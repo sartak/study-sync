@@ -139,12 +139,18 @@ async fn main() -> Result<()> {
         is_online,
     );
     let screenshots = screenshots.start(
+        orchestrator_tx.clone(),
         notify_tx.clone(),
         args.screenshot_url,
         args.extra_directory,
         is_online,
     );
-    let saves = saves.start(notify_tx.clone(), args.save_url, is_online);
+    let saves = saves.start(
+        orchestrator_tx.clone(),
+        notify_tx.clone(),
+        args.save_url,
+        is_online,
+    );
     let notify = notify.start(args.led_path.clone());
     let signal = shutdown_signal(orchestrator_tx);
 
