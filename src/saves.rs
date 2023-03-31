@@ -13,6 +13,7 @@ use tokio::sync::mpsc;
 pub enum Event {
     UploadSave(PathBuf, PathBuf),
     UploadScreenshot(PathBuf, PathBuf),
+    IsOnline(bool),
     StartShutdown,
 }
 
@@ -26,6 +27,7 @@ pub struct Saves {
     save_url: String,
     buffer: VecDeque<Event>,
     digest_cache: Option<(PathBuf, String)>,
+    is_online: bool,
 }
 
 pub fn prepare() -> (SavesPre, mpsc::UnboundedSender<Event>) {
@@ -38,6 +40,7 @@ impl SavesPre {
         self,
         notify_tx: mpsc::UnboundedSender<notify::Event>,
         save_url: String,
+        is_online: bool,
     ) -> Result<()> {
         let saves = Saves {
             rx: self.rx,
@@ -45,6 +48,7 @@ impl SavesPre {
             save_url,
             buffer: VecDeque::new(),
             digest_cache: None,
+            is_online,
         };
         saves.start().await
     }
@@ -69,6 +73,9 @@ impl Saves {
                 info!("Handling event {event:?}");
                 match event {
                     Event::StartShutdown => break,
+
+                    Event::IsOnline(online) => self.is_online = online,
+
                     _ => self.buffer.push_back(event),
                 }
             } else if let Some(event) = self.buffer.pop_front() {
@@ -110,6 +117,8 @@ impl Saves {
 
                         self.notify_success(true, &format!("Uploaded save screenshot {path:?}"));
                     }
+
+                    Event::IsOnline(_) => unreachable!(),
 
                     Event::StartShutdown => unreachable!(),
                 }

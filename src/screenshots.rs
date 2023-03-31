@@ -15,6 +15,7 @@ use tokio_util::codec::{BytesCodec, FramedRead};
 pub enum Event {
     UploadScreenshot(PathBuf, String),
     UploadExtra(PathBuf),
+    IsOnline(bool),
     StartShutdown,
 }
 
@@ -29,6 +30,7 @@ pub struct Screenshots {
     extra_directory: String,
     buffer: VecDeque<Event>,
     digest_cache: Option<(PathBuf, String)>,
+    is_online: bool,
 }
 
 pub fn prepare() -> (ScreenshotsPre, mpsc::UnboundedSender<Event>) {
@@ -42,6 +44,7 @@ impl ScreenshotsPre {
         notify_tx: mpsc::UnboundedSender<notify::Event>,
         screenshot_url: String,
         extra_directory: String,
+        is_online: bool,
     ) -> Result<()> {
         let screenshots = Screenshots {
             rx: self.rx,
@@ -50,6 +53,7 @@ impl ScreenshotsPre {
             extra_directory,
             buffer: VecDeque::new(),
             digest_cache: None,
+            is_online,
         };
         screenshots.start().await
     }
@@ -74,6 +78,9 @@ impl Screenshots {
                 info!("Handling event {event:?}");
                 match event {
                     Event::StartShutdown => break,
+
+                    Event::IsOnline(online) => self.is_online = online,
+
                     _ => self.buffer.push_back(event),
                 }
             } else if let Some(event) = self.buffer.pop_front() {
@@ -113,6 +120,8 @@ impl Screenshots {
                             ));
                         }
                     }
+
+                    Event::IsOnline(_) => unreachable!(),
 
                     Event::StartShutdown => unreachable!(),
                 }

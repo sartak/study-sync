@@ -60,6 +60,7 @@ pub enum Event {
         submitted_start: u64,
         submitted_end: u64,
     },
+    IsOnline(bool),
     StartShutdown,
 }
 
@@ -598,6 +599,21 @@ impl Orchestrator {
                     }
 
                     self.notify_success(true, &format!("Created full intake {intake_id:?}"));
+                }
+
+                Event::IsOnline(online) => {
+                    if let Err(e) = self.intake_tx.send(intake::Event::IsOnline(online)) {
+                        self.notify_error(&format!("Could not send to intake: {e:?}"));
+                    }
+                    if let Err(e) = self
+                        .screenshots_tx
+                        .send(screenshots::Event::IsOnline(online))
+                    {
+                        self.notify_error(&format!("Could not send to screenshots: {e:?}"));
+                    }
+                    if let Err(e) = self.saves_tx.send(saves::Event::IsOnline(online)) {
+                        self.notify_error(&format!("Could not send to saves: {e:?}"));
+                    }
                 }
 
                 Event::StartShutdown => {

@@ -91,6 +91,8 @@ async fn main() -> Result<()> {
         }
     }
 
+    let is_online = true;
+
     let (server, server_tx) = server::prepare();
     let (screenshot_watcher, screenshot_watcher_tx) = watcher::prepare();
     let (save_watcher, save_watcher_tx) = watcher::prepare();
@@ -130,10 +132,19 @@ async fn main() -> Result<()> {
         server_tx,
         notify_tx.clone(),
     );
-    let intake = intake.start(orchestrator_tx.clone(), notify_tx.clone(), args.intake_url);
-    let screenshots =
-        screenshots.start(notify_tx.clone(), args.screenshot_url, args.extra_directory);
-    let saves = saves.start(notify_tx.clone(), args.save_url);
+    let intake = intake.start(
+        orchestrator_tx.clone(),
+        notify_tx.clone(),
+        args.intake_url,
+        is_online,
+    );
+    let screenshots = screenshots.start(
+        notify_tx.clone(),
+        args.screenshot_url,
+        args.extra_directory,
+        is_online,
+    );
+    let saves = saves.start(notify_tx.clone(), args.save_url, is_online);
     let notify = notify.start(args.led_path.clone());
     let signal = shutdown_signal(orchestrator_tx);
 

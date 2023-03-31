@@ -4,7 +4,12 @@ use crate::{
 };
 use anyhow::{anyhow, Context, Result};
 use axum::{
-    extract::Query, extract::State, http::StatusCode, response::IntoResponse, routing::get, Router,
+    extract::Query,
+    extract::State,
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
+    Router,
 };
 use log::info;
 use serde::Deserialize;
@@ -68,6 +73,8 @@ async fn handle_events(mut rx: mpsc::UnboundedReceiver<Event>) {
 fn router(server: Server) -> Router {
     Router::new()
         .route("/game", get(game_get))
+        .route("/online", post(online_post))
+        .route("/offline", post(offline_post))
         .with_state(Arc::new(server))
 }
 
@@ -113,6 +120,34 @@ async fn game_get(
     }
 
     info!("GET /game -> 204");
+    StatusCode::NO_CONTENT.into_response()
+}
+
+async fn online_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
+    if let Err(e) = server
+        .orchestrator_tx
+        .send(orchestrator::Event::IsOnline(true))
+    {
+        let e = anyhow!(e).context("failed to send event to orchestrator");
+        server.notify_error(&format!("POST /online -> 500 ({e:?})"));
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    info!("POST /online -> 204");
+    StatusCode::NO_CONTENT.into_response()
+}
+
+async fn offline_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
+    if let Err(e) = server
+        .orchestrator_tx
+        .send(orchestrator::Event::IsOnline(false))
+    {
+        let e = anyhow!(e).context("failed to send event to orchestrator");
+        server.notify_error(&format!("POST /offline -> 500 ({e:?})"));
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    info!("POST /offline -> 204");
     StatusCode::NO_CONTENT.into_response()
 }
 

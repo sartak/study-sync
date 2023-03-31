@@ -33,6 +33,7 @@ pub enum Event {
         start_time: u64,
         end_time: u64,
     },
+    IsOnline(bool),
     StartShutdown,
 }
 
@@ -59,6 +60,7 @@ pub struct Intake {
     intake_url: String,
     play_to_intake: HashMap<i64, String>,
     buffer: VecDeque<Event>,
+    is_online: bool,
 }
 
 pub fn prepare() -> (IntakePre, mpsc::UnboundedSender<Event>) {
@@ -72,6 +74,7 @@ impl IntakePre {
         orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
         notify_tx: mpsc::UnboundedSender<notify::Event>,
         intake_url: String,
+        is_online: bool,
     ) -> Result<()> {
         let intake = Intake {
             rx: self.rx,
@@ -80,6 +83,7 @@ impl IntakePre {
             intake_url,
             play_to_intake: HashMap::new(),
             buffer: VecDeque::new(),
+            is_online,
         };
         intake.start().await
     }
@@ -104,6 +108,9 @@ impl Intake {
                 info!("Handling event {event:?}");
                 match event {
                     Event::StartShutdown => break,
+
+                    Event::IsOnline(online) => self.is_online = online,
+
                     _ => self.buffer.push_back(event),
                 }
             } else if let Some(event) = self.buffer.pop_front() {
@@ -227,6 +234,8 @@ impl Intake {
                             continue;
                         }
                     }
+
+                    Event::IsOnline(_) => unreachable!(),
 
                     Event::StartShutdown => unreachable!(),
                 }
