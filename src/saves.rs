@@ -1,7 +1,7 @@
 use crate::{
     notify::{self, Notifier},
     orchestrator,
-    screenshots::Uploader,
+    screenshots::{Online, Uploader},
 };
 use anyhow::Result;
 use log::{error, info};
@@ -177,5 +177,15 @@ impl Uploader for Saves {
 
     fn set_digest_cache(&mut self, cache: Option<(PathBuf, String)>) {
         self.digest_cache = cache;
+    }
+}
+
+impl Online for Saves {
+    fn orchestrator_tx(&self) -> &mpsc::UnboundedSender<orchestrator::Event> {
+        &self.orchestrator_tx
+    }
+
+    fn is_online(&self) -> bool {
+        self.is_online
     }
 }

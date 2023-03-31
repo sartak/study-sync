@@ -1,6 +1,7 @@
 use crate::{
     notify::{self, Notifier},
     orchestrator::{self, Language},
+    screenshots::Online,
 };
 use anyhow::{anyhow, Result};
 use log::{error, info, warn};
@@ -364,5 +365,15 @@ impl Notifier for Intake {
 
     fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
         &self.notify_tx
+    }
+}
+
+impl Online for Intake {
+    fn orchestrator_tx(&self) -> &mpsc::UnboundedSender<orchestrator::Event> {
+        &self.orchestrator_tx
+    }
+
+    fn is_online(&self) -> bool {
+        self.is_online
     }
 }

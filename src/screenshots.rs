@@ -167,7 +167,7 @@ impl Notifier for Screenshots {
 }
 
 #[async_trait]
-pub trait Uploader: Notifier + Send {
+pub trait Uploader: Notifier + Send + Online {
     fn get_digest_cache(&self) -> &Option<(PathBuf, String)>;
     fn set_digest_cache(&mut self, cache: Option<(PathBuf, String)>);
 
@@ -265,5 +265,52 @@ impl Uploader for Screenshots {
 
     fn set_digest_cache(&mut self, cache: Option<(PathBuf, String)>) {
         self.digest_cache = cache;
+    }
+}
+
+pub trait Online: Notifier {
+    fn orchestrator_tx(&self) -> &mpsc::UnboundedSender<orchestrator::Event>;
+    fn is_online(&self) -> bool;
+
+    fn observed_is_online(&self, is_online: bool) {
+        if self.is_online() == is_online {
+            return;
+        }
+
+        info!(
+            "Observed online status changed: {:?} -> {is_online:?}",
+            self.is_online()
+        );
+
+        if let Err(e) = self
+            .orchestrator_tx()
+            .send(orchestrator::Event::IsOnline(is_online))
+        {
+            self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
+        }
+    }
+
+    fn observed_online(&self) {
+        self.observed_is_online(true);
+    }
+
+    fn observed_offline(&self) {
+        self.observed_is_online(false);
+    }
+
+    fn observed_error(&self, error: &reqwest::Error) {
+        if error.is_timeout() || format!("{error:?}").contains("error trying to connect") {
+            self.observed_offline();
+        }
+    }
+}
+
+impl Online for Screenshots {
+    fn orchestrator_tx(&self) -> &mpsc::UnboundedSender<orchestrator::Event> {
+        &self.orchestrator_tx
+    }
+
+    fn is_online(&self) -> bool {
+        self.is_online
     }
 }
