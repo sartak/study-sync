@@ -32,7 +32,6 @@ pub struct Screenshots {
     notify_tx: mpsc::UnboundedSender<notify::Event>,
     screenshot_url: String,
     extra_directory: String,
-    buffer: VecDeque<Event>,
     digest_cache: Option<(PathBuf, String)>,
     is_online: bool,
 }
@@ -57,7 +56,6 @@ impl ScreenshotsPre {
             notify_tx,
             screenshot_url,
             extra_directory,
-            buffer: VecDeque::new(),
             digest_cache: None,
             is_online,
         };
@@ -68,11 +66,12 @@ impl ScreenshotsPre {
 impl Screenshots {
     pub async fn start(mut self) -> Result<()> {
         let mut needs_retry = false;
+        let mut buffer = VecDeque::new();
 
         loop {
             // if we have a buffer, then we want to just check on the channel and continue
             // otherwise block
-            let event = if self.buffer.is_empty() {
+            let event = if buffer.is_empty() {
                 self.rx.recv().await
             } else {
                 match self.rx.try_recv() {
@@ -89,9 +88,9 @@ impl Screenshots {
 
                     Event::IsOnline(online) => self.is_online = online,
 
-                    _ => self.buffer.push_back(event),
+                    _ => buffer.push_back(event),
                 }
-            } else if let Some(event) = self.buffer.pop_front() {
+            } else if let Some(event) = buffer.pop_front() {
                 if needs_retry {
                     needs_retry = false;
                     info!("Sleeping for 5s before trying again");
@@ -102,7 +101,7 @@ impl Screenshots {
                     Event::UploadScreenshot(path, directory) => {
                         if let Err(e) = self.upload_screenshot(path, directory).await {
                             error!("Could not upload {path:?}: {e:?}");
-                            self.buffer.push_front(event);
+                            buffer.push_front(event);
                             needs_retry = true;
                             continue;
                         }
@@ -121,7 +120,7 @@ impl Screenshots {
                         let directory = self.extra_directory.clone();
                         if let Err(e) = self.upload_screenshot(path, &directory).await {
                             error!("Could not upload {path:?}: {e:?}");
-                            self.buffer.push_front(event);
+                            buffer.push_front(event);
                             needs_retry = true;
                             continue;
                         }
