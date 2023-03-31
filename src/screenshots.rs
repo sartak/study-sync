@@ -67,6 +67,8 @@ impl ScreenshotsPre {
 
 impl Screenshots {
     pub async fn start(mut self) -> Result<()> {
+        let mut needs_retry = false;
+
         loop {
             // if we have a buffer, then we want to just check on the channel and continue
             // otherwise block
@@ -90,13 +92,18 @@ impl Screenshots {
                     _ => self.buffer.push_back(event),
                 }
             } else if let Some(event) = self.buffer.pop_front() {
+                if needs_retry {
+                    needs_retry = false;
+                    info!("Sleeping for 5s before trying again");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                }
+
                 match &event {
                     Event::UploadScreenshot(path, directory) => {
                         if let Err(e) = self.upload_screenshot(path, directory).await {
                             error!("Could not upload {path:?}: {e:?}");
                             self.buffer.push_front(event);
-                            info!("Sleeping for 5s before trying again");
-                            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                            needs_retry = true;
                             continue;
                         }
 
@@ -115,8 +122,7 @@ impl Screenshots {
                         if let Err(e) = self.upload_screenshot(path, &directory).await {
                             error!("Could not upload {path:?}: {e:?}");
                             self.buffer.push_front(event);
-                            info!("Sleeping for 5s before trying again");
-                            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                            needs_retry = true;
                             continue;
                         }
 

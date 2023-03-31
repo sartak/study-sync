@@ -92,6 +92,8 @@ impl IntakePre {
 
 impl Intake {
     pub async fn start(mut self) -> Result<()> {
+        let mut needs_retry = false;
+
         loop {
             // if we have a buffer, then we want to just check on the channel and continue
             // otherwise block
@@ -115,6 +117,12 @@ impl Intake {
                     _ => self.buffer.push_back(event),
                 }
             } else if let Some(event) = self.buffer.pop_front() {
+                if needs_retry {
+                    needs_retry = false;
+                    info!("Sleeping for 5s before trying again");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                }
+
                 match &event {
                     Event::PreviousGame { play_id, intake_id } => {
                         self.play_to_intake.insert(*play_id, intake_id.clone());
@@ -134,8 +142,7 @@ impl Intake {
                             Err(e) => {
                                 error!("Could not create intake: {e:?}");
                                 self.buffer.push_front(event);
-                                info!("Sleeping for 5s before trying again");
-                                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                needs_retry = true;
                                 continue;
                             }
                         };
@@ -162,8 +169,7 @@ impl Intake {
                             Err(e) => {
                                 error!("Could not finish intake: {e:?}");
                                 self.buffer.push_front(event);
-                                info!("Sleeping for 5s before trying again");
-                                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                needs_retry = true;
                                 continue;
                             }
                         };
@@ -195,8 +201,7 @@ impl Intake {
                                 Err(e) => {
                                     error!("Could not finish intake: {e:?}");
                                     self.buffer.push_front(event);
-                                    info!("Sleeping for 5s before trying again");
-                                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                    needs_retry = true;
                                     continue;
                                 }
                             };
@@ -216,8 +221,7 @@ impl Intake {
                                 Err(e) => {
                                     error!("Could not create intake: {e:?}");
                                     self.buffer.push_front(event);
-                                    info!("Sleeping for 5s before trying again");
-                                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                    needs_retry = true;
                                     continue;
                                 }
                             };
