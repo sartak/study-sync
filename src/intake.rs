@@ -118,8 +118,9 @@ impl Intake {
             } else if let Some(event) = buffer.pop_front() {
                 if needs_retry {
                     needs_retry = false;
-                    info!("Sleeping for 5s before trying again");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                    let sleep = if self.is_online { 5 } else { 30 };
+                    info!("Sleeping for {sleep}s before trying again");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(sleep)).await;
                 }
 
                 match &event {
