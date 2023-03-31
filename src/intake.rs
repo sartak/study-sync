@@ -312,11 +312,20 @@ impl Intake {
         let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(10));
         let client = builder.build()?;
 
-        let res = client
+        let res = match client
             .request(method.clone(), url)
             .json(&request)
             .send()
-            .await?;
+            .await
+        {
+            Ok(res) => res,
+            Err(e) => {
+                self.observed_error(&e);
+                return Err(anyhow!(e));
+            }
+        };
+
+        self.observed_online();
 
         if !res.status().is_success() {
             return Err(anyhow!(

@@ -242,7 +242,15 @@ pub trait Uploader: Notifier + Send + Online {
             req = req.header(reqwest::header::CONTENT_TYPE, content_type);
         }
 
-        let res = req.send().await?;
+        let res = match req.send().await {
+            Ok(res) => res,
+            Err(e) => {
+                self.observed_error(&e);
+                return Err(anyhow!(e));
+            }
+        };
+
+        self.observed_online();
 
         if !res.status().is_success() {
             return Err(anyhow!(
