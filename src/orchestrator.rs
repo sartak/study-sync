@@ -448,7 +448,7 @@ impl Orchestrator {
                 }
 
                 Event::SaveFileCreated(path) => {
-                    let extension = match path.extension() {
+                    let extension = match full_extension(&path) {
                         Some(e) => e,
                         None => {
                             self.notify_error(&format!(
@@ -691,5 +691,36 @@ impl notify::Notifier for Orchestrator {
 
     fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
         &self.notify_tx
+    }
+}
+
+fn full_extension(path: &Path) -> Option<&str> {
+    path.file_name().and_then(|b| {
+        b.to_str()
+            .and_then(|b| b.split_once('.').map(|(_, after)| after))
+    })
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_full_extension() {
+        assert_eq!(full_extension(Path::new("")), None);
+        assert_eq!(full_extension(Path::new(".")), None);
+        assert_eq!(full_extension(Path::new("..")), None);
+        assert_eq!(full_extension(Path::new(".foo")), Some("foo"));
+        assert_eq!(full_extension(Path::new("foo")), None);
+        assert_eq!(full_extension(Path::new("foo.")), Some(""));
+        assert_eq!(full_extension(Path::new("foo..")), Some("."));
+        assert_eq!(full_extension(Path::new("foo.state")), Some("state"));
+        assert_eq!(full_extension(Path::new("foo..state")), Some(".state"));
+        assert_eq!(full_extension(Path::new("foo.state.")), Some("state."));
+        assert_eq!(
+            full_extension(Path::new("foo.state.auto")),
+            Some("state.auto"),
+        );
     }
 }
