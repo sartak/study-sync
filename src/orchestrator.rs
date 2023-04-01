@@ -92,6 +92,7 @@ pub fn prepare() -> (OrchestratorPre, mpsc::UnboundedSender<Event>) {
 }
 
 impl OrchestratorPre {
+    #![allow(clippy::too_many_arguments)]
     pub async fn start(
         self,
         database: Database,
