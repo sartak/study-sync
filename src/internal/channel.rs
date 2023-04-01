@@ -24,6 +24,8 @@ pub trait PriorityRetryChannel {
         let mut retry_deadline = None;
         let mut buffer = VecDeque::new();
         let mut priority_event = None;
+        let mut priority_retry = None;
+        let mut normal_retry = None;
 
         let online_secs = 5;
         let offline_secs = 30;
@@ -31,14 +33,25 @@ pub trait PriorityRetryChannel {
         loop {
             if let Some(event) = priority_event {
                 match self.handle(&event).await {
-                    Action::Continue => priority_event = None,
+                    Action::Continue => {
+                        priority_retry = None;
+                        priority_event = None;
+                    }
                     Action::Halt => break,
                     Action::Retry => {
+                        if let Some(r) = priority_retry {
+                            let r = r + 1;
+                            priority_retry = Some(r);
+                        } else {
+                            priority_retry = Some(1);
+                        };
+
                         let wait = if self.is_online() {
                             online_secs
                         } else {
                             offline_secs
                         };
+
                         info!("Waiting for {wait}s before retrying");
                         tokio::time::sleep(Duration::from_secs(wait)).await;
                         priority_event = Some(event);
@@ -81,14 +94,24 @@ pub trait PriorityRetryChannel {
             if let Some(event) = event {
                 if self.is_high_priority(&event) {
                     match self.handle(&event).await {
-                        Action::Continue => {}
+                        Action::Continue => priority_retry = None,
+
                         Action::Halt => break,
+
                         Action::Retry => {
+                            if let Some(r) = priority_retry {
+                                let r = r + 1;
+                                priority_retry = Some(r);
+                            } else {
+                                priority_retry = Some(1);
+                            };
+
                             let wait = if self.is_online() {
                                 online_secs
                             } else {
                                 offline_secs
                             };
+
                             info!("Waiting for {wait}s before retrying");
                             tokio::time::sleep(Duration::from_secs(wait)).await;
                             priority_event = Some(event);
@@ -99,11 +122,21 @@ pub trait PriorityRetryChannel {
                 }
             } else if let Some(event) = buffer.pop_front() {
                 match self.handle(&event).await {
-                    Action::Continue => {}
+                    Action::Continue => normal_retry = None,
+
                     Action::Halt => break,
+
                     Action::Retry => {
                         buffer.push_front(event);
                         let now = Instant::now();
+
+                        if let Some(r) = normal_retry {
+                            let r = r + 1;
+                            normal_retry = Some(r);
+                        } else {
+                            normal_retry = Some(1);
+                        };
+
                         retry_deadline = Some((
                             now + Duration::from_secs(online_secs),
                             now + Duration::from_secs(offline_secs),
