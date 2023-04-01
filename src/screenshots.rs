@@ -10,8 +10,12 @@ use sha1::{Digest, Sha1};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tokio::fs::{remove_file, File};
 use tokio::sync::mpsc;
+use tokio::time::Instant;
+use tokio::{
+    fs::{remove_file, File},
+    time::timeout_at,
+};
 use tokio_util::codec::{BytesCodec, FramedRead};
 
 #[derive(Debug)]
@@ -63,16 +67,45 @@ impl ScreenshotsPre {
     }
 }
 
+pub fn make_retry() -> Option<(Instant, Instant)> {
+    let now = Instant::now();
+    let online_wait = 5;
+    let offline_wait = 60;
+    Some((
+        now + Duration::from_secs(online_wait),
+        now + Duration::from_secs(offline_wait),
+    ))
+}
+
 impl Screenshots {
     pub async fn start(mut self) -> Result<()> {
-        let mut needs_retry = false;
+        let mut retry_deadline = None;
         let mut buffer = VecDeque::new();
 
         loop {
-            // if we have a buffer, then we want to just check on the channel and continue
-            // otherwise block
+            // If the buffer is empty, block until we get an event
             let event = if buffer.is_empty() {
                 self.rx.recv().await
+            // Otherwise we have events to process. First let's see if we have
+            // a deadline to wait for; if so then we'll block on the channel
+            // until the deadline
+            } else if let Some((online_deadline, offline_deadline)) = retry_deadline {
+                let deadline = if self.is_online {
+                    online_deadline
+                } else {
+                    offline_deadline
+                };
+                info!("Waiting until {deadline:?} to retry");
+                match timeout_at(deadline, self.rx.recv()).await {
+                    Ok(event) => event,
+                    Err(_) => {
+                        retry_deadline = None;
+                        None
+                    }
+                }
+            // Otherwise we have an event to process but no deadline to wait for
+            // so just quickly check the channel (which will almost certainly be
+            // empty) then proceed to processing events
             } else {
                 match self.rx.try_recv() {
                     Ok(e) => Some(e),
@@ -91,19 +124,12 @@ impl Screenshots {
                     _ => buffer.push_back(event),
                 }
             } else if let Some(event) = buffer.pop_front() {
-                if needs_retry {
-                    needs_retry = false;
-                    let sleep = if self.is_online { 5 } else { 30 };
-                    info!("Sleeping for {sleep}s before trying again");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(sleep)).await;
-                }
-
                 match &event {
                     Event::UploadScreenshot(path, directory) => {
                         if let Err(e) = self.upload_screenshot(path, directory).await {
                             error!("Could not upload {path:?}: {e:?}");
                             buffer.push_front(event);
-                            needs_retry = true;
+                            retry_deadline = make_retry();
                             continue;
                         }
 
@@ -122,7 +148,7 @@ impl Screenshots {
                         if let Err(e) = self.upload_screenshot(path, &directory).await {
                             error!("Could not upload {path:?}: {e:?}");
                             buffer.push_front(event);
-                            needs_retry = true;
+                            retry_deadline = make_retry();
                             continue;
                         }
 
