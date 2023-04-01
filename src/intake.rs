@@ -1,15 +1,16 @@
 use crate::{
+    channel::{self, Action, PriorityRetryChannel},
     notify::{self, Notifier},
     orchestrator::{self, Language},
-    screenshots::{make_retry, Online},
+    screenshots::Online,
 };
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
-use tokio::time::timeout_at;
 
 #[derive(Debug)]
 pub enum Event {
@@ -56,7 +57,6 @@ pub struct IntakePre {
 }
 
 pub struct Intake {
-    rx: mpsc::UnboundedReceiver<Event>,
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
     intake_url: String,
@@ -78,188 +78,19 @@ impl IntakePre {
         is_online: bool,
     ) -> Result<()> {
         let intake = Intake {
-            rx: self.rx,
             orchestrator_tx,
             notify_tx,
             intake_url,
             play_to_intake: HashMap::new(),
             is_online,
         };
-        intake.start().await
+        intake.start(self.rx).await
     }
 }
 
 impl Intake {
-    pub async fn start(mut self) -> Result<()> {
-        let mut retry_deadline = None;
-        let mut buffer = VecDeque::new();
-
-        loop {
-            // If the buffer is empty, block until we get an event
-            let event = if buffer.is_empty() {
-                self.rx.recv().await
-            // Otherwise we have events to process. First let's see if we have
-            // a deadline to wait for; if so then we'll block on the channel
-            // until the deadline
-            } else if let Some((online_deadline, offline_deadline)) = retry_deadline {
-                let deadline = if self.is_online {
-                    online_deadline
-                } else {
-                    offline_deadline
-                };
-                info!("Waiting until {deadline:?} to retry");
-                match timeout_at(deadline, self.rx.recv()).await {
-                    Ok(event) => event,
-                    Err(_) => {
-                        retry_deadline = None;
-                        None
-                    }
-                }
-            // Otherwise we have an event to process but no deadline to wait for
-            // so just quickly check the channel (which will almost certainly be
-            // empty) then proceed to processing events
-            } else {
-                match self.rx.try_recv() {
-                    Ok(e) => Some(e),
-                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
-                    _ => None,
-                }
-            };
-
-            if let Some(event) = event {
-                info!("Handling event {event:?}");
-                match event {
-                    Event::StartShutdown => break,
-
-                    Event::IsOnline(online) => self.is_online = online,
-
-                    _ => buffer.push_back(event),
-                }
-            } else if let Some(event) = buffer.pop_front() {
-                match &event {
-                    Event::PreviousGame { play_id, intake_id } => {
-                        self.play_to_intake.insert(*play_id, intake_id.clone());
-                    }
-
-                    Event::SubmitStarted {
-                        play_id,
-                        game_label,
-                        language,
-                        start_time,
-                    } => {
-                        let (intake_id, submitted_start) = match self
-                            .create_intake(game_label, language, *start_time, None)
-                            .await
-                        {
-                            Ok((i, s)) => (i, s),
-                            Err(e) => {
-                                error!("Could not create intake: {e:?}");
-                                buffer.push_front(event);
-                                retry_deadline = make_retry();
-                                continue;
-                            }
-                        };
-
-                        self.play_to_intake.insert(*play_id, intake_id.clone());
-                        let msg = orchestrator::Event::IntakeStarted {
-                            play_id: *play_id,
-                            intake_id,
-                            submitted_start,
-                        };
-                        if let Err(e) = self.orchestrator_tx.send(msg) {
-                            self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
-                            continue;
-                        }
-                    }
-
-                    Event::SubmitEnded {
-                        play_id,
-                        intake_id,
-                        end_time,
-                    } => {
-                        let submitted_end = match self.finish_intake(intake_id, *end_time).await {
-                            Ok(e) => e,
-                            Err(e) => {
-                                error!("Could not finish intake: {e:?}");
-                                buffer.push_front(event);
-                                retry_deadline = make_retry();
-                                continue;
-                            }
-                        };
-
-                        self.play_to_intake.remove(play_id);
-
-                        let msg = orchestrator::Event::IntakeEnded {
-                            play_id: *play_id,
-                            submitted_end,
-                        };
-                        if let Err(e) = self.orchestrator_tx.send(msg) {
-                            self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
-                            continue;
-                        }
-                    }
-
-                    Event::SubmitFull {
-                        play_id,
-                        game_label,
-                        language,
-                        start_time,
-                        end_time,
-                    } => {
-                        let msg;
-                        if let Some(intake_id) = self.play_to_intake.get(play_id) {
-                            let submitted_end = match self.finish_intake(intake_id, *end_time).await
-                            {
-                                Ok(e) => e,
-                                Err(e) => {
-                                    error!("Could not finish intake: {e:?}");
-                                    buffer.push_front(event);
-                                    retry_deadline = make_retry();
-                                    continue;
-                                }
-                            };
-
-                            self.play_to_intake.remove(play_id);
-
-                            msg = orchestrator::Event::IntakeEnded {
-                                play_id: *play_id,
-                                submitted_end,
-                            };
-                        } else {
-                            let (intake_id, submitted) = match self
-                                .create_intake(game_label, language, *start_time, Some(*end_time))
-                                .await
-                            {
-                                Ok((i, s)) => (i, s),
-                                Err(e) => {
-                                    error!("Could not create intake: {e:?}");
-                                    buffer.push_front(event);
-                                    retry_deadline = make_retry();
-                                    continue;
-                                }
-                            };
-
-                            msg = orchestrator::Event::IntakeFull {
-                                play_id: *play_id,
-                                intake_id,
-                                submitted_start: submitted,
-                                submitted_end: submitted,
-                            };
-                        }
-
-                        if let Err(e) = self.orchestrator_tx.send(msg) {
-                            self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
-                            continue;
-                        }
-                    }
-
-                    Event::IsOnline(_) => unreachable!(),
-
-                    Event::StartShutdown => unreachable!(),
-                }
-            }
-        }
-
+    pub async fn start(mut self, rx: mpsc::UnboundedReceiver<Event>) -> Result<()> {
+        self.run(rx).await;
         info!("intake gracefully shut down");
         Ok(())
     }
@@ -401,5 +232,150 @@ impl Online for Intake {
 
     fn is_online(&self) -> bool {
         self.is_online
+    }
+}
+
+#[async_trait]
+impl channel::PriorityRetryChannel for Intake {
+    type Event = Event;
+
+    fn is_online(&self) -> bool {
+        self.is_online
+    }
+
+    fn is_high_priority(&self, event: &Event) -> bool {
+        match event {
+            Event::StartShutdown => true,
+            Event::IsOnline(_) => true,
+
+            Event::PreviousGame { .. } => false,
+            Event::SubmitStarted { .. } => false,
+            Event::SubmitEnded { .. } => false,
+            Event::SubmitFull { .. } => false,
+        }
+    }
+
+    async fn handle(&mut self, event: &Event) -> Action {
+        info!("Handling event {event:?}");
+
+        match event {
+            Event::StartShutdown => Action::Halt,
+
+            Event::IsOnline(online) => {
+                self.is_online = *online;
+                Action::Continue
+            }
+
+            Event::PreviousGame { play_id, intake_id } => {
+                self.play_to_intake.insert(*play_id, intake_id.clone());
+                Action::Continue
+            }
+
+            Event::SubmitStarted {
+                play_id,
+                game_label,
+                language,
+                start_time,
+            } => {
+                let (intake_id, submitted_start) = match self
+                    .create_intake(game_label, language, *start_time, None)
+                    .await
+                {
+                    Ok((i, s)) => (i, s),
+                    Err(e) => {
+                        error!("Could not create intake: {e:?}");
+                        return Action::Retry;
+                    }
+                };
+
+                self.play_to_intake.insert(*play_id, intake_id.clone());
+                let msg = orchestrator::Event::IntakeStarted {
+                    play_id: *play_id,
+                    intake_id,
+                    submitted_start,
+                };
+                if let Err(e) = self.orchestrator_tx.send(msg) {
+                    self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
+                }
+
+                Action::Continue
+            }
+
+            Event::SubmitEnded {
+                play_id,
+                intake_id,
+                end_time,
+            } => {
+                let submitted_end = match self.finish_intake(intake_id, *end_time).await {
+                    Ok(e) => e,
+                    Err(e) => {
+                        error!("Could not finish intake: {e:?}");
+                        return Action::Retry;
+                    }
+                };
+
+                self.play_to_intake.remove(play_id);
+
+                let msg = orchestrator::Event::IntakeEnded {
+                    play_id: *play_id,
+                    submitted_end,
+                };
+                if let Err(e) = self.orchestrator_tx.send(msg) {
+                    self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
+                }
+
+                Action::Continue
+            }
+
+            Event::SubmitFull {
+                play_id,
+                game_label,
+                language,
+                start_time,
+                end_time,
+            } => {
+                let msg;
+                if let Some(intake_id) = self.play_to_intake.get(play_id) {
+                    let submitted_end = match self.finish_intake(intake_id, *end_time).await {
+                        Ok(e) => e,
+                        Err(e) => {
+                            error!("Could not finish intake: {e:?}");
+                            return Action::Retry;
+                        }
+                    };
+
+                    self.play_to_intake.remove(play_id);
+
+                    msg = orchestrator::Event::IntakeEnded {
+                        play_id: *play_id,
+                        submitted_end,
+                    };
+                } else {
+                    let (intake_id, submitted) = match self
+                        .create_intake(game_label, language, *start_time, Some(*end_time))
+                        .await
+                    {
+                        Ok((i, s)) => (i, s),
+                        Err(e) => {
+                            error!("Could not create intake: {e:?}");
+                            return Action::Retry;
+                        }
+                    };
+
+                    msg = orchestrator::Event::IntakeFull {
+                        play_id: *play_id,
+                        intake_id,
+                        submitted_start: submitted,
+                        submitted_end: submitted,
+                    };
+                }
+
+                if let Err(e) = self.orchestrator_tx.send(msg) {
+                    self.notify_error(&format!("Could not send to orchestrator: {e:?}"));
+                }
+
+                Action::Continue
+            }
+        }
     }
 }

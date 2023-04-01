@@ -1,15 +1,15 @@
 use crate::{
+    channel::{self, Action, PriorityRetryChannel},
     notify::{self, Notifier},
     orchestrator,
-    screenshots::{make_retry, Online, Uploader},
+    screenshots::{Online, Uploader},
 };
 use anyhow::Result;
+use async_trait::async_trait;
 use log::{error, info};
-use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use tokio::fs::remove_file;
 use tokio::sync::mpsc;
-use tokio::time::timeout_at;
 
 #[derive(Debug)]
 pub enum Event {
@@ -24,7 +24,6 @@ pub struct SavesPre {
 }
 
 pub struct Saves {
-    rx: mpsc::UnboundedReceiver<Event>,
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
     save_url: String,
@@ -46,108 +45,19 @@ impl SavesPre {
         is_online: bool,
     ) -> Result<()> {
         let saves = Saves {
-            rx: self.rx,
             orchestrator_tx,
             notify_tx,
             save_url,
             digest_cache: None,
             is_online,
         };
-        saves.start().await
+        saves.start(self.rx).await
     }
 }
 
 impl Saves {
-    pub async fn start(mut self) -> Result<()> {
-        let mut retry_deadline = None;
-        let mut buffer = VecDeque::new();
-
-        loop {
-            // If the buffer is empty, block until we get an event
-            let event = if buffer.is_empty() {
-                self.rx.recv().await
-            // Otherwise we have events to process. First let's see if we have
-            // a deadline to wait for; if so then we'll block on the channel
-            // until the deadline
-            } else if let Some((online_deadline, offline_deadline)) = retry_deadline {
-                let deadline = if self.is_online {
-                    online_deadline
-                } else {
-                    offline_deadline
-                };
-                info!("Waiting until {deadline:?} to retry");
-                match timeout_at(deadline, self.rx.recv()).await {
-                    Ok(event) => event,
-                    Err(_) => {
-                        retry_deadline = None;
-                        None
-                    }
-                }
-            // Otherwise we have an event to process but no deadline to wait for
-            // so just quickly check the channel (which will almost certainly be
-            // empty) then proceed to processing events
-            } else {
-                match self.rx.try_recv() {
-                    Ok(e) => Some(e),
-                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
-                    _ => None,
-                }
-            };
-
-            if let Some(event) = event {
-                info!("Handling event {event:?}");
-                match event {
-                    Event::StartShutdown => break,
-
-                    Event::IsOnline(online) => self.is_online = online,
-
-                    _ => buffer.push_back(event),
-                }
-            } else if let Some(event) = buffer.pop_front() {
-                match &event {
-                    Event::UploadSave(path, directory) => {
-                        if let Err(e) = self.upload_file(path, directory, false).await {
-                            error!("Could not upload {path:?}: {e:?}");
-                            buffer.push_front(event);
-                            retry_deadline = make_retry();
-                            continue;
-                        }
-
-                        if let Err(e) = remove_file(&path).await {
-                            self.notify_error(&format!(
-                                "Could not remove uploaded save file {path:?}: {e:?}"
-                            ));
-                            continue;
-                        }
-
-                        self.notify_success(true, &format!("Uploaded save {path:?}"));
-                    }
-
-                    Event::UploadScreenshot(path, directory) => {
-                        if let Err(e) = self.upload_file(path, directory, true).await {
-                            error!("Could not upload {path:?}: {e:?}");
-                            buffer.push_front(event);
-                            retry_deadline = make_retry();
-                            continue;
-                        }
-
-                        if let Err(e) = remove_file(&path).await {
-                            self.notify_error(&format!(
-                                "Could not remove uploaded save screenshot file {path:?}: {e:?}"
-                            ));
-                            continue;
-                        }
-
-                        self.notify_success(true, &format!("Uploaded save screenshot {path:?}"));
-                    }
-
-                    Event::IsOnline(_) => unreachable!(),
-
-                    Event::StartShutdown => unreachable!(),
-                }
-            }
-        }
-
+    pub async fn start(mut self, rx: mpsc::UnboundedReceiver<Event>) -> Result<()> {
+        self.run(rx).await;
         info!("saves gracefully shut down");
         Ok(())
     }
@@ -206,5 +116,73 @@ impl Online for Saves {
 
     fn is_online(&self) -> bool {
         self.is_online
+    }
+}
+
+#[async_trait]
+impl channel::PriorityRetryChannel for Saves {
+    type Event = Event;
+
+    fn is_online(&self) -> bool {
+        self.is_online
+    }
+
+    fn is_high_priority(&self, event: &Event) -> bool {
+        match event {
+            Event::StartShutdown => true,
+            Event::IsOnline(_) => true,
+
+            Event::UploadSave(_, _) => false,
+            Event::UploadScreenshot(_, _) => false,
+        }
+    }
+
+    async fn handle(&mut self, event: &Event) -> Action {
+        info!("Handling event {event:?}");
+
+        match event {
+            Event::StartShutdown => Action::Halt,
+
+            Event::IsOnline(online) => {
+                self.is_online = *online;
+                Action::Continue
+            }
+
+            Event::UploadSave(path, directory) => {
+                if let Err(e) = self.upload_file(path, directory, false).await {
+                    error!("Could not upload {path:?}: {e:?}");
+                    return Action::Retry;
+                }
+
+                if let Err(e) = remove_file(&path).await {
+                    self.notify_error(&format!(
+                        "Could not remove uploaded save file {path:?}: {e:?}"
+                    ));
+                    return Action::Continue;
+                }
+
+                self.notify_success(true, &format!("Uploaded save {path:?}"));
+
+                Action::Continue
+            }
+
+            Event::UploadScreenshot(path, directory) => {
+                if let Err(e) = self.upload_file(path, directory, true).await {
+                    error!("Could not upload {path:?}: {e:?}");
+                    return Action::Retry;
+                }
+
+                if let Err(e) = remove_file(&path).await {
+                    self.notify_error(&format!(
+                        "Could not remove uploaded save screenshot file {path:?}: {e:?}"
+                    ));
+                    return Action::Continue;
+                }
+
+                self.notify_success(true, &format!("Uploaded save screenshot {path:?}"));
+
+                Action::Continue
+            }
+        }
     }
 }

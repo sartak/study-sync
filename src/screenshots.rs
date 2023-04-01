@@ -1,4 +1,5 @@
 use crate::{
+    channel::{self, Action, PriorityRetryChannel},
     notify::{self, Notifier},
     orchestrator,
 };
@@ -7,15 +8,10 @@ use async_trait::async_trait;
 use log::{error, info};
 use reqwest::Body;
 use sha1::{Digest, Sha1};
-use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use tokio::fs::{remove_file, File};
 use tokio::sync::mpsc;
-use tokio::time::Instant;
-use tokio::{
-    fs::{remove_file, File},
-    time::timeout_at,
-};
 use tokio_util::codec::{BytesCodec, FramedRead};
 
 #[derive(Debug)]
@@ -31,7 +27,6 @@ pub struct ScreenshotsPre {
 }
 
 pub struct Screenshots {
-    rx: mpsc::UnboundedReceiver<Event>,
     orchestrator_tx: mpsc::UnboundedSender<orchestrator::Event>,
     notify_tx: mpsc::UnboundedSender<notify::Event>,
     screenshot_url: String,
@@ -54,8 +49,7 @@ impl ScreenshotsPre {
         extra_directory: String,
         is_online: bool,
     ) -> Result<()> {
-        let screenshots = Screenshots {
-            rx: self.rx,
+        let mut screenshots = Screenshots {
             orchestrator_tx,
             notify_tx,
             screenshot_url,
@@ -63,109 +57,13 @@ impl ScreenshotsPre {
             digest_cache: None,
             is_online,
         };
-        screenshots.start().await
+        screenshots.start(self.rx).await
     }
 }
 
-pub fn make_retry() -> Option<(Instant, Instant)> {
-    let now = Instant::now();
-    let online_wait = 5;
-    let offline_wait = 60;
-    Some((
-        now + Duration::from_secs(online_wait),
-        now + Duration::from_secs(offline_wait),
-    ))
-}
-
 impl Screenshots {
-    pub async fn start(mut self) -> Result<()> {
-        let mut retry_deadline = None;
-        let mut buffer = VecDeque::new();
-
-        loop {
-            // If the buffer is empty, block until we get an event
-            let event = if buffer.is_empty() {
-                self.rx.recv().await
-            // Otherwise we have events to process. First let's see if we have
-            // a deadline to wait for; if so then we'll block on the channel
-            // until the deadline
-            } else if let Some((online_deadline, offline_deadline)) = retry_deadline {
-                let deadline = if self.is_online {
-                    online_deadline
-                } else {
-                    offline_deadline
-                };
-                info!("Waiting until {deadline:?} to retry");
-                match timeout_at(deadline, self.rx.recv()).await {
-                    Ok(event) => event,
-                    Err(_) => {
-                        retry_deadline = None;
-                        None
-                    }
-                }
-            // Otherwise we have an event to process but no deadline to wait for
-            // so just quickly check the channel (which will almost certainly be
-            // empty) then proceed to processing events
-            } else {
-                match self.rx.try_recv() {
-                    Ok(e) => Some(e),
-                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
-                    _ => None,
-                }
-            };
-
-            if let Some(event) = event {
-                info!("Handling event {event:?}");
-                match event {
-                    Event::StartShutdown => break,
-
-                    Event::IsOnline(online) => self.is_online = online,
-
-                    _ => buffer.push_back(event),
-                }
-            } else if let Some(event) = buffer.pop_front() {
-                match &event {
-                    Event::UploadScreenshot(path, directory) => {
-                        if let Err(e) = self.upload_screenshot(path, directory).await {
-                            error!("Could not upload {path:?}: {e:?}");
-                            buffer.push_front(event);
-                            retry_deadline = make_retry();
-                            continue;
-                        }
-
-                        if let Err(e) = remove_file(&path).await {
-                            self.notify_error(&format!(
-                                "Could not remove uploaded screenshot file {path:?}: {e:?}"
-                            ));
-                            continue;
-                        }
-
-                        self.notify_success(true, &format!("Uploaded screenshot {path:?}"));
-                    }
-
-                    Event::UploadExtra(path) => {
-                        let directory = self.extra_directory.clone();
-                        if let Err(e) = self.upload_screenshot(path, &directory).await {
-                            error!("Could not upload {path:?}: {e:?}");
-                            buffer.push_front(event);
-                            retry_deadline = make_retry();
-                            continue;
-                        }
-
-                        if let Err(e) = remove_file(&path).await {
-                            self.notify_error(&format!(
-                                "Could not remove extra screenshot file {path:?}: {e:?}"
-                            ));
-                        }
-                    }
-
-                    Event::IsOnline(_) => unreachable!(),
-
-                    Event::StartShutdown => unreachable!(),
-                }
-            }
-        }
-
+    async fn start(&mut self, rx: mpsc::UnboundedReceiver<Event>) -> Result<()> {
+        self.run(rx).await;
         info!("screenshots gracefully shut down");
         Ok(())
     }
@@ -352,5 +250,70 @@ impl Online for Screenshots {
 
     fn is_online(&self) -> bool {
         self.is_online
+    }
+}
+
+#[async_trait]
+impl channel::PriorityRetryChannel for Screenshots {
+    type Event = Event;
+
+    fn is_online(&self) -> bool {
+        self.is_online
+    }
+
+    fn is_high_priority(&self, event: &Event) -> bool {
+        match event {
+            Event::StartShutdown => true,
+            Event::IsOnline(_) => true,
+
+            Event::UploadScreenshot(_, _) => false,
+            Event::UploadExtra(_) => false,
+        }
+    }
+
+    async fn handle(&mut self, event: &Event) -> Action {
+        info!("Handling event {event:?}");
+
+        match event {
+            Event::StartShutdown => Action::Halt,
+
+            Event::IsOnline(online) => {
+                self.is_online = *online;
+                Action::Continue
+            }
+
+            Event::UploadScreenshot(path, directory) => {
+                if let Err(e) = self.upload_screenshot(path, directory).await {
+                    error!("Could not upload {path:?}: {e:?}");
+                    return Action::Retry;
+                }
+
+                if let Err(e) = remove_file(&path).await {
+                    self.notify_error(&format!(
+                        "Could not remove uploaded screenshot file {path:?}: {e:?}"
+                    ));
+                    return Action::Continue;
+                }
+
+                self.notify_success(true, &format!("Uploaded screenshot {path:?}"));
+                Action::Continue
+            }
+
+            Event::UploadExtra(path) => {
+                let directory = self.extra_directory.clone();
+                if let Err(e) = self.upload_screenshot(path, &directory).await {
+                    error!("Could not upload {path:?}: {e:?}");
+                    return Action::Retry;
+                }
+
+                if let Err(e) = remove_file(&path).await {
+                    self.notify_error(&format!(
+                        "Could not remove extra screenshot file {path:?}: {e:?}"
+                    ));
+                }
+
+                Action::Continue
+            }
+        }
     }
 }

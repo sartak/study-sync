@@ -1,3 +1,4 @@
+mod channel;
 mod database;
 mod intake;
 mod notify;
