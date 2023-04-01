@@ -1,6 +1,5 @@
-mod fs;
-
 use crate::{
+    internal::fs,
     notify::{self, Notifier},
     orchestrator,
 };

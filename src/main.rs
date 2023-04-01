@@ -1,6 +1,6 @@
-mod channel;
 mod database;
 mod intake;
+mod internal;
 mod notify;
 mod orchestrator;
 mod saves;

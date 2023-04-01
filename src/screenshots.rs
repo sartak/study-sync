@@ -1,5 +1,5 @@
 use crate::{
-    channel::{self, Action, PriorityRetryChannel},
+    internal::channel::{self, Action, PriorityRetryChannel},
     notify::{self, Notifier},
     orchestrator,
 };
