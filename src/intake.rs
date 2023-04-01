@@ -1,8 +1,11 @@
 use crate::{
-    internal::channel::{self, Action, PriorityRetryChannel},
-    notify::{self, Notifier},
+    internal::{
+        channel::{Action, PriorityRetryChannel},
+        notifier::Notifier,
+        online::Online,
+    },
+    notify,
     orchestrator::{self, Language},
-    screenshots::Online,
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -236,7 +239,7 @@ impl Online for Intake {
 }
 
 #[async_trait]
-impl channel::PriorityRetryChannel for Intake {
+impl PriorityRetryChannel for Intake {
     type Event = Event;
 
     fn is_online(&self) -> bool {

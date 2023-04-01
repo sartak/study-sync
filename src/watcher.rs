@@ -1,7 +1,6 @@
 use crate::{
-    internal::fs,
-    notify::{self, Notifier},
-    orchestrator,
+    internal::{fs, notifier::Notifier},
+    notify, orchestrator,
 };
 use anyhow::{anyhow, Result};
 use log::info;

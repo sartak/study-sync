@@ -1,5 +1,6 @@
 use crate::{
-    database::Database, intake, notify, notify::Notifier, saves, screenshots, server, watcher,
+    database::Database, intake, internal::notifier::Notifier, notify, saves, screenshots, server,
+    watcher,
 };
 use anyhow::Result;
 use chrono::prelude::*;
@@ -701,7 +702,7 @@ impl Orchestrator {
     }
 }
 
-impl notify::Notifier for Orchestrator {
+impl Notifier for Orchestrator {
     fn notify_target(&self) -> &str {
         "study_sync::orchestrator"
     }

@@ -1,7 +1,4 @@
-use crate::{
-    notify::{self, Notifier},
-    orchestrator,
-};
+use crate::{internal::notifier::Notifier, notify, orchestrator};
 use anyhow::{anyhow, Context, Result};
 use axum::{
     extract::Query,

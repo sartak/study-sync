@@ -1,6 +1,7 @@
 use crate::{
     intake,
-    notify::{self, Notifier},
+    internal::notifier::Notifier,
+    notify,
     orchestrator::{Game, Language, Play},
 };
 use anyhow::Result;
