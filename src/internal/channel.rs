@@ -79,7 +79,6 @@ pub trait PriorityRetryChannel {
                 } else {
                     offline_deadline
                 };
-                info!("Waiting until {deadline:?} to retry");
                 match timeout_at(deadline, rx.recv()).await {
                     Ok(event) => event,
                     Err(_) => {
@@ -157,9 +156,19 @@ pub trait PriorityRetryChannel {
                             1
                         };
 
+                        let online_secs = retries * online_secs;
+                        let offline_secs = retries * offline_secs;
+
+                        let (a, b) = if self.is_online() {
+                            (online_secs, offline_secs)
+                        } else {
+                            (offline_secs, online_secs)
+                        };
+                        info!("Waiting for {a}s (or possibly {b}s) before retrying");
+
                         retry_deadline = Some((
-                            now + Duration::from_secs(retries * online_secs),
-                            now + Duration::from_secs(retries * offline_secs),
+                            now + Duration::from_secs(online_secs),
+                            now + Duration::from_secs(offline_secs),
                         ))
                     }
                 }
