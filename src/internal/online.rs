@@ -33,7 +33,7 @@ pub trait Online: Notifier {
     }
 
     fn observed_error(&self, error: &reqwest::Error) {
-        if error.is_timeout() || format!("{error:?}").contains("error trying to connect") {
+        if error.is_timeout() || format!("{error:?}").contains("ConnectError") {
             self.observed_offline();
         }
     }
