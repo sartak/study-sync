@@ -1,17 +1,8 @@
-mod database;
-mod intake;
-mod internal;
-mod notify;
-mod orchestrator;
-mod saves;
-mod screenshots;
-mod server;
-mod watcher;
-
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use log::{error, info};
 use std::{iter, path::Path, path::PathBuf, process};
+use study_sync::*;
 use tokio::{select, signal, sync::mpsc, try_join};
 
 #[derive(Parser, Debug)]
