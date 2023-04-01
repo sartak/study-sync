@@ -465,7 +465,8 @@ impl Orchestrator {
                         Some(p) => p.to_path_buf(),
                         None => continue,
                     };
-                    directory.set_extension("");
+
+                    remove_full_extension(&mut directory);
 
                     let mut target = directory.join(self.now_ymd());
                     target.set_extension(extension);
@@ -719,6 +720,21 @@ fn full_extension(path: &Path) -> Option<&str> {
     })
 }
 
+fn remove_full_extension(path: &mut PathBuf) {
+    if let Some(basename) = path.file_name() {
+        let basename = basename.to_owned();
+        if let Some(extension) = full_extension(path) {
+            if let Some(basename) = basename.to_str() {
+                let stem_len = basename.len() - extension.len() - 1;
+                if stem_len > 0 {
+                    let stem = &basename[0..stem_len];
+                    path.set_file_name(stem);
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -740,5 +756,26 @@ mod test {
             full_extension(Path::new("foo.state.auto")),
             Some("state.auto"),
         );
+    }
+
+    #[test]
+    fn test_remove_full_extension() {
+        fn t(path: &str) -> String {
+            let mut path = PathBuf::from(path);
+            remove_full_extension(&mut path);
+            path.to_str().unwrap().to_string()
+        }
+
+        assert_eq!(t(""), "");
+        assert_eq!(t("foo"), "foo");
+        assert_eq!(t("foo.state"), "foo");
+        assert_eq!(t("foo.state.auto"), "foo");
+        assert_eq!(t("foo."), "foo");
+        assert_eq!(t("foo..state"), "foo");
+        assert_eq!(t("."), ".");
+        assert_eq!(t(".."), "..");
+        assert_eq!(t(".foo"), ".foo");
+        assert_eq!(t("..foo"), "..foo");
+        assert_eq!(t("..f.oo"), "..f.oo");
     }
 }
