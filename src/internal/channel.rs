@@ -102,9 +102,11 @@ pub trait PriorityRetryChannel {
                             priority_event = Some(event);
                         }
                     }
+                } else {
+                    buffer.push_back(event);
                 }
             } else if let Some(event) = buffer.pop_front() {
-                match self.handle(event).await {
+                match self.handle(&event).await {
                     Action::Continue => {}
                     Action::Halt => break,
                     Action::Retry => {
