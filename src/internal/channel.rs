@@ -39,18 +39,25 @@ pub trait PriorityRetryChannel {
                     }
                     Action::Halt => break,
                     Action::Retry => {
-                        if let Some(r) = priority_retry {
+                        let retries = if let Some(r) = priority_retry {
                             let r = r + 1;
                             priority_retry = Some(r);
+                            if r > 5 {
+                                5
+                            } else {
+                                r
+                            }
                         } else {
                             priority_retry = Some(1);
+                            1
                         };
 
-                        let wait = if self.is_online() {
-                            online_secs
-                        } else {
-                            offline_secs
-                        };
+                        let wait = retries
+                            * if self.is_online() {
+                                online_secs
+                            } else {
+                                offline_secs
+                            };
 
                         info!("Waiting for {wait}s before retrying");
                         tokio::time::sleep(Duration::from_secs(wait)).await;
@@ -99,18 +106,25 @@ pub trait PriorityRetryChannel {
                         Action::Halt => break,
 
                         Action::Retry => {
-                            if let Some(r) = priority_retry {
+                            let retries = if let Some(r) = priority_retry {
                                 let r = r + 1;
                                 priority_retry = Some(r);
+                                if r > 5 {
+                                    5
+                                } else {
+                                    r
+                                }
                             } else {
                                 priority_retry = Some(1);
+                                1
                             };
 
-                            let wait = if self.is_online() {
-                                online_secs
-                            } else {
-                                offline_secs
-                            };
+                            let wait = retries
+                                * if self.is_online() {
+                                    online_secs
+                                } else {
+                                    offline_secs
+                                };
 
                             info!("Waiting for {wait}s before retrying");
                             tokio::time::sleep(Duration::from_secs(wait)).await;
@@ -130,16 +144,22 @@ pub trait PriorityRetryChannel {
                         buffer.push_front(event);
                         let now = Instant::now();
 
-                        if let Some(r) = normal_retry {
+                        let retries = if let Some(r) = normal_retry {
                             let r = r + 1;
                             normal_retry = Some(r);
+                            if r > 5 {
+                                5
+                            } else {
+                                r
+                            }
                         } else {
                             normal_retry = Some(1);
+                            1
                         };
 
                         retry_deadline = Some((
-                            now + Duration::from_secs(online_secs),
-                            now + Duration::from_secs(offline_secs),
+                            now + Duration::from_secs(retries * online_secs),
+                            now + Duration::from_secs(retries * offline_secs),
                         ))
                     }
                 }

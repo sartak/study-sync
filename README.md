@@ -6,7 +6,7 @@ study-sync is a service designed to run alongside [RetroArch](https://www.retroa
 - Notify player of progress and errors by blinking the device's LED
 - Allow restarting study-sync, or the entire device, without losing any state; including graceful shutdown on SIGTERM/ctrl-c
 - Fully tolerate being offline (or on an unreliable connection) for extended periods, and automatically sync everything when back online
-- Tries to be efficient and so does not copy files; instead, manages hardlinks
+- Tries to be efficient and so does not copy files; instead, manages hardlinks, retries uploads with backoff, etc.
 
 It's written in async Rust where each component has its own "thread". The components are:
 
