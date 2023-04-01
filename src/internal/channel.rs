@@ -12,17 +12,6 @@ pub enum Action {
     Retry,
 }
 
-const ONLINE_SECS: u64 = 5;
-const OFFLINE_SECS: u64 = 30;
-
-fn make_retry() -> Option<(Instant, Instant)> {
-    let now = Instant::now();
-    Some((
-        now + Duration::from_secs(ONLINE_SECS),
-        now + Duration::from_secs(OFFLINE_SECS),
-    ))
-}
-
 #[async_trait]
 pub trait PriorityRetryChannel {
     type Event: std::fmt::Debug + Send + Sync;
@@ -36,6 +25,9 @@ pub trait PriorityRetryChannel {
         let mut buffer = VecDeque::new();
         let mut priority_event = None;
 
+        let online_secs = 5;
+        let offline_secs = 30;
+
         loop {
             if let Some(event) = priority_event {
                 match self.handle(&event).await {
@@ -43,9 +35,9 @@ pub trait PriorityRetryChannel {
                     Action::Halt => break,
                     Action::Retry => {
                         let wait = if self.is_online() {
-                            ONLINE_SECS
+                            online_secs
                         } else {
-                            OFFLINE_SECS
+                            offline_secs
                         };
                         info!("Waiting for {wait}s before retrying");
                         tokio::time::sleep(Duration::from_secs(wait)).await;
@@ -93,9 +85,9 @@ pub trait PriorityRetryChannel {
                         Action::Halt => break,
                         Action::Retry => {
                             let wait = if self.is_online() {
-                                ONLINE_SECS
+                                online_secs
                             } else {
-                                OFFLINE_SECS
+                                offline_secs
                             };
                             info!("Waiting for {wait}s before retrying");
                             tokio::time::sleep(Duration::from_secs(wait)).await;
@@ -111,7 +103,11 @@ pub trait PriorityRetryChannel {
                     Action::Halt => break,
                     Action::Retry => {
                         buffer.push_front(event);
-                        retry_deadline = make_retry();
+                        let now = Instant::now();
+                        retry_deadline = Some((
+                            now + Duration::from_secs(online_secs),
+                            now + Duration::from_secs(offline_secs),
+                        ))
                     }
                 }
             }
