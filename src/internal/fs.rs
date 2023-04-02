@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use chrono::prelude::*;
 use futures::{
     channel::mpsc::{channel, Receiver},
     SinkExt, StreamExt,
@@ -9,6 +10,7 @@ use notify::{
     Config, Event as NotifyEvent, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
 };
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
 pub async fn launch<P>(paths: &[P], tx: mpsc::UnboundedSender<PathBuf>) -> Result<()>
@@ -155,4 +157,17 @@ where
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file())
         .map(|e| e.into_path())
+}
+
+pub fn now_milli() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+        .to_string()
+}
+
+pub fn now_ymd() -> String {
+    let now: DateTime<Local> = Local::now();
+    now.format("%Y-%m-%d-%H-%M-%S").to_string()
 }

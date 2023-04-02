@@ -2,16 +2,14 @@ use crate::{
     database::Database,
     intake,
     internal::{
-        fs::{full_extension, recursive_files_in, remove_full_extension},
+        fs::{full_extension, now_milli, now_ymd, recursive_files_in, remove_full_extension},
         notifier::Notifier,
     },
     notify, saves, screenshots, server, watcher,
 };
 use anyhow::Result;
-use chrono::prelude::*;
 use log::{error, info};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs::{create_dir_all, hard_link, remove_file, rename};
 use tokio::join;
 use tokio::sync::mpsc;
@@ -381,7 +379,7 @@ impl Orchestrator {
                 Event::ScreenshotCreated(path) => {
                     if let Some(play) = self.playing() {
                         let mut destination = self.screenshot_dir().unwrap();
-                        destination.push(self.now());
+                        destination.push(now_milli());
                         destination.set_extension(
                             path.extension()
                                 .unwrap_or_else(|| std::ffi::OsStr::new("png")),
@@ -454,7 +452,7 @@ impl Orchestrator {
 
                     remove_full_extension(&mut directory);
 
-                    let mut target = directory.join(self.now_ymd());
+                    let mut target = directory.join(now_ymd());
                     target.set_extension(extension);
 
                     let pending_save_destination = self.pending_saves.join(&target);
@@ -673,19 +671,6 @@ impl Orchestrator {
             },
             None => Some(path),
         }
-    }
-
-    fn now(&self) -> String {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-            .to_string()
-    }
-
-    fn now_ymd(&self) -> String {
-        let now: DateTime<Local> = Local::now();
-        now.format("%Y-%m-%d-%H-%M-%S").to_string()
     }
 }
 
