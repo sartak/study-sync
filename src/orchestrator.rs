@@ -264,7 +264,7 @@ impl Orchestrator {
                         ));
                     }
 
-                    let path = match self.fixed_path(&path) {
+                    let path = match self.trim_game_path(&path) {
                         Some(p) => p,
                         None => continue,
                     };
@@ -346,7 +346,7 @@ impl Orchestrator {
                 }
 
                 Event::GameEnded(path) => {
-                    let path = match self.fixed_path(&path) {
+                    let path = match self.trim_game_path(&path) {
                         Some(p) => p,
                         None => continue,
                     };
@@ -457,7 +457,7 @@ impl Orchestrator {
                         }
                     };
 
-                    let mut directory = match self.fixed_path(&path) {
+                    let mut directory = match self.trim_game_path(&path) {
                         Some(p) => p.to_path_buf(),
                         None => continue,
                     };
@@ -672,7 +672,7 @@ impl Orchestrator {
             .detach_save_currently_playing(self.current_play.as_ref().map(|p| p.id))
     }
 
-    fn fixed_path<'p>(&self, path: &'p Path) -> Option<&'p Path> {
+    fn trim_game_path<'p>(&self, path: &'p Path) -> Option<&'p Path> {
         match self.trim_game_prefix {
             Some(ref prefix) => match path.strip_prefix(prefix) {
                 Ok(p) => Some(p),
