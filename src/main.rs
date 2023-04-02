@@ -83,6 +83,14 @@ async fn main() -> Result<()> {
         }
     }
 
+    let latest_screenshot = args.pending_screenshots.join("latest.png");
+    let extra_directory = args.pending_screenshots.join("extra/");
+    if !extra_directory.is_dir() {
+        return Err(anyhow!(
+            "{extra_directory:?} (derived from --pending-screenshots) is not a directory"
+        ));
+    }
+
     let is_online = true;
 
     let (server, server_tx) = server::prepare();
@@ -115,6 +123,8 @@ async fn main() -> Result<()> {
         args.pending_screenshots,
         args.pending_saves,
         args.keep_saves,
+        extra_directory,
+        latest_screenshot,
         args.trim_game_prefix,
         intake_tx,
         screenshots_tx,

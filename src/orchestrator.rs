@@ -84,6 +84,8 @@ pub struct Orchestrator {
     pending_screenshots: PathBuf,
     pending_saves: PathBuf,
     keep_saves: PathBuf,
+    extra_directory: PathBuf,
+    latest_screenshot: PathBuf,
     trim_game_prefix: Option<String>,
     database: Database,
     current_play: Option<Play>,
@@ -103,6 +105,8 @@ impl OrchestratorPre {
         pending_screenshots: PathBuf,
         pending_saves: PathBuf,
         keep_saves: PathBuf,
+        extra_directory: PathBuf,
+        latest_screenshot: PathBuf,
         trim_game_prefix: Option<String>,
         intake_tx: mpsc::UnboundedSender<intake::Event>,
         screenshots_tx: mpsc::UnboundedSender<screenshots::Event>,
@@ -113,7 +117,7 @@ impl OrchestratorPre {
         notify_tx: mpsc::UnboundedSender<notify::Event>,
     ) -> Result<()> {
         self.upload_existing_screenshots(&pending_screenshots, &screenshots_tx)?;
-        self.upload_extra_screenshots(&pending_screenshots, &screenshots_tx);
+        self.upload_extra_screenshots(&extra_directory, &screenshots_tx);
         self.upload_existing_saves(&pending_saves, &saves_tx)?;
 
         let previous = self.load_backlog(&database, &intake_tx).await?;
@@ -130,6 +134,8 @@ impl OrchestratorPre {
             pending_screenshots,
             pending_saves,
             keep_saves,
+            extra_directory,
+            latest_screenshot,
             trim_game_prefix,
             database,
             current_play: previous,
@@ -186,10 +192,10 @@ impl OrchestratorPre {
 
     fn upload_extra_screenshots(
         &self,
-        pending_screenshots: &Path,
+        extra_directory: &Path,
         screenshots_tx: &mpsc::UnboundedSender<screenshots::Event>,
     ) {
-        let extra_directory = pending_screenshots.join("extra/");
+        let extra_directory = extra_directory.to_owned();
         let screenshots_tx = screenshots_tx.clone();
 
         tokio::spawn(async move {
@@ -248,9 +254,6 @@ impl OrchestratorPre {
 
 impl Orchestrator {
     pub async fn start(mut self) -> Result<()> {
-        let extra_directory = self.pending_screenshots.join("extra/");
-        let latest_screenshot = self.pending_screenshots.join("latest.png");
-
         while let Some(event) = self.rx.recv().await {
             info!("Handling {event:?}");
             match event {
@@ -267,14 +270,15 @@ impl Orchestrator {
                     };
 
                     let (remove_res, game_res) = join!(
-                        remove_file(&latest_screenshot),
+                        remove_file(&self.latest_screenshot),
                         self.database.game_for_path(path),
                     );
 
                     if let Err(e) = remove_res {
                         if e.kind() != std::io::ErrorKind::NotFound {
                             self.notify_error(&format!(
-                                "Could not remove latest screenshot {latest_screenshot:?}: {e:?}"
+                                "Could not remove latest screenshot {:?}: {e:?}",
+                                self.latest_screenshot
                             ));
                             continue;
                         }
@@ -387,8 +391,10 @@ impl Orchestrator {
 
                         info!("Moving screenshot {path:?} to {destination:?} for {play:?}");
 
-                        let (rename_res, remove_res) =
-                            join!(rename(&path, &destination), remove_file(&latest_screenshot));
+                        let (rename_res, remove_res) = join!(
+                            rename(&path, &destination),
+                            remove_file(&self.latest_screenshot)
+                        );
 
                         if let Err(e) = rename_res {
                             self.notify_error(&format!(
@@ -399,13 +405,19 @@ impl Orchestrator {
 
                         if let Err(e) = remove_res {
                             if e.kind() != std::io::ErrorKind::NotFound {
-                                self.notify_error(&format!("Could not remove latest screenshot {latest_screenshot:?}: {e:?}"));
+                                self.notify_error(&format!(
+                                    "Could not remove latest screenshot {:?}: {e:?}",
+                                    self.latest_screenshot
+                                ));
                                 continue;
                             }
                         }
 
-                        if let Err(e) = hard_link(&destination, &latest_screenshot).await {
-                            self.notify_error(&format!("Could not hardlink screenshot {path:?} to {latest_screenshot:?}: {e:?}"));
+                        if let Err(e) = hard_link(&destination, &self.latest_screenshot).await {
+                            self.notify_error(&format!(
+                                "Could not hardlink screenshot {path:?} to {:?}: {e:?}",
+                                self.latest_screenshot
+                            ));
                             continue;
                         }
 
@@ -417,7 +429,7 @@ impl Orchestrator {
                             self.notify_error(&format!("Could not send to screenshots: {e:?}"));
                         }
                     } else {
-                        let mut destination = extra_directory.clone();
+                        let mut destination = self.extra_directory.clone();
                         destination.push(path.file_name().unwrap());
                         self.notify_error(&format!("Dropping screenshot {path:?} to {destination:?} because no current playing!"));
                         if let Err(e) = rename(&path, &destination).await {
@@ -462,6 +474,8 @@ impl Orchestrator {
                     let mut keep_screenshot_destination = keep_save_destination.clone();
                     pending_screenshot_destination.set_extension("png");
                     keep_screenshot_destination.set_extension("png");
+
+                    let latest_screenshot = &self.latest_screenshot;
 
                     let (
                         pending_save_res,
