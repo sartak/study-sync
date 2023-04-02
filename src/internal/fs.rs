@@ -8,7 +8,7 @@ use notify::{
     event::{AccessKind, AccessMode},
     Config, Event as NotifyEvent, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
 
 pub async fn launch<P>(paths: &[P], tx: mpsc::UnboundedSender<PathBuf>) -> Result<()>
@@ -68,4 +68,71 @@ fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Resul
     )?;
 
     Ok((watcher, rx))
+}
+
+pub fn full_extension(path: &Path) -> Option<&str> {
+    path.file_name().and_then(|b| {
+        b.to_str()
+            .and_then(|b| b.split_once('.').map(|(_, after)| after))
+    })
+}
+
+pub fn remove_full_extension(path: &mut PathBuf) {
+    if let Some(basename) = path.file_name() {
+        let basename = basename.to_owned();
+        if let Some(extension) = full_extension(path) {
+            if let Some(basename) = basename.to_str() {
+                let stem_len = basename.len() - extension.len() - 1;
+                if stem_len > 0 {
+                    let stem = &basename[0..stem_len];
+                    path.set_file_name(stem);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_full_extension() {
+        assert_eq!(full_extension(Path::new("")), None);
+        assert_eq!(full_extension(Path::new(".")), None);
+        assert_eq!(full_extension(Path::new("..")), None);
+        assert_eq!(full_extension(Path::new(".foo")), Some("foo"));
+        assert_eq!(full_extension(Path::new("foo")), None);
+        assert_eq!(full_extension(Path::new("foo.")), Some(""));
+        assert_eq!(full_extension(Path::new("foo..")), Some("."));
+        assert_eq!(full_extension(Path::new("foo.state")), Some("state"));
+        assert_eq!(full_extension(Path::new("foo..state")), Some(".state"));
+        assert_eq!(full_extension(Path::new("foo.state.")), Some("state."));
+        assert_eq!(
+            full_extension(Path::new("foo.state.auto")),
+            Some("state.auto"),
+        );
+    }
+
+    #[test]
+    fn test_remove_full_extension() {
+        fn t(path: &str) -> String {
+            let mut path = PathBuf::from(path);
+            remove_full_extension(&mut path);
+            path.to_str().unwrap().to_string()
+        }
+
+        assert_eq!(t(""), "");
+        assert_eq!(t("foo"), "foo");
+        assert_eq!(t("foo.state"), "foo");
+        assert_eq!(t("foo.state.auto"), "foo");
+        assert_eq!(t("foo."), "foo");
+        assert_eq!(t("foo..state"), "foo");
+        assert_eq!(t("."), ".");
+        assert_eq!(t(".."), "..");
+        assert_eq!(t(".foo"), ".foo");
+        assert_eq!(t("..foo"), "..foo");
+        assert_eq!(t("..f.oo"), "..f.oo");
+    }
 }
