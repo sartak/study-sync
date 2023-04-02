@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
-pub async fn launch<P>(paths: &[P], tx: mpsc::UnboundedSender<PathBuf>) -> Result<()>
+pub async fn start_watcher<P>(paths: &[P], tx: mpsc::UnboundedSender<PathBuf>) -> Result<()>
 where
     P: AsRef<std::path::Path> + std::fmt::Debug + Send,
 {

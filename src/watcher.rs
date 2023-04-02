@@ -48,7 +48,7 @@ impl WatcherPre {
 
         {
             let paths = paths.to_owned();
-            tokio::spawn(async move { fs::launch(&paths, fs_tx).await });
+            tokio::spawn(async move { fs::start_watcher(&paths, fs_tx).await });
         }
 
         let watcher = Watcher {
