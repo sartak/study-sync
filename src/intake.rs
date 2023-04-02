@@ -3,6 +3,7 @@ use crate::{
         channel::{Action, PriorityRetryChannel},
         notifier::Notifier,
         online::Online,
+        requester::Requester,
     },
     notify,
     orchestrator::{self, Language},
@@ -12,7 +13,7 @@ use async_trait::async_trait;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
 #[derive(Debug)]
@@ -124,7 +125,7 @@ impl Intake {
         };
 
         let (submitted, IntakeResponseObject { rowid }) =
-            self.request(reqwest::Method::POST, request).await?;
+            self.submit(reqwest::Method::POST, request).await?;
         Ok((rowid, submitted))
     }
 
@@ -141,17 +142,17 @@ impl Intake {
             end_time,
         };
 
-        let (submitted, _) = self.request(reqwest::Method::PATCH, request).await?;
+        let (submitted, _) = self.submit(reqwest::Method::PATCH, request).await?;
         Ok(submitted)
     }
 
-    async fn request<R>(
+    async fn submit<R>(
         &self,
         method: reqwest::Method,
         request: R,
     ) -> Result<(u64, IntakeResponseObject)>
     where
-        R: Serialize + std::fmt::Debug,
+        R: Serialize + std::fmt::Debug + Send + Sync,
     {
         let url = &self.intake_url;
 
@@ -160,32 +161,7 @@ impl Intake {
             .unwrap()
             .as_secs();
 
-        let builder = reqwest::ClientBuilder::new().timeout(Duration::from_secs(10));
-        let client = builder.build()?;
-
-        let res = match client
-            .request(method.clone(), url)
-            .json(&request)
-            .send()
-            .await
-        {
-            Ok(res) => res,
-            Err(e) => {
-                self.observed_error(&e);
-                return Err(anyhow!(e));
-            }
-        };
-
-        self.observed_online();
-
-        if !res.status().is_success() {
-            return Err(anyhow!(
-                "Error {method:?}ing {url:?} with {request:?}: got status code {}",
-                res.status()
-            ));
-        }
-
-        match res.json().await? {
+        match self.request(url, &method, request).await? {
             IntakeResponse {
                 error: Some(error), ..
             } => Err(anyhow!("Error {method:?}ing {url:?} from server: {error}")),
@@ -382,3 +358,5 @@ impl PriorityRetryChannel for Intake {
         }
     }
 }
+
+impl Requester for Intake {}
