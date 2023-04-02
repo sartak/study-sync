@@ -2,7 +2,7 @@ use crate::{
     database::Database,
     intake,
     internal::{
-        fs::{full_extension, remove_full_extension},
+        fs::{full_extension, recursive_files_in, remove_full_extension},
         notifier::Notifier,
     },
     notify, saves, screenshots, server, watcher,
@@ -145,14 +145,7 @@ impl OrchestratorPre {
         pending_screenshots: &Path,
         screenshots_tx: &mpsc::UnboundedSender<screenshots::Event>,
     ) -> Result<()> {
-        for entry in walkdir::WalkDir::new(pending_screenshots)
-            .sort_by_file_name()
-            .min_depth(3)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().is_file())
-        {
-            let path = entry.into_path();
+        for path in recursive_files_in(pending_screenshots, Some(3)) {
             let mut directory = path.clone();
             directory.pop();
             let directory = directory.strip_prefix(pending_screenshots)?;
@@ -171,13 +164,7 @@ impl OrchestratorPre {
         pending_saves: &Path,
         saves_tx: &mpsc::UnboundedSender<saves::Event>,
     ) -> Result<()> {
-        for entry in walkdir::WalkDir::new(pending_saves)
-            .sort_by_file_name()
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().is_file())
-        {
-            let path = entry.into_path();
+        for path in recursive_files_in(pending_saves, None) {
             let mut directory = path.clone();
             directory.pop();
             let directory = directory.strip_prefix(pending_saves)?.to_owned();
@@ -208,13 +195,7 @@ impl OrchestratorPre {
         let screenshots_tx = screenshots_tx.clone();
 
         tokio::spawn(async move {
-            for entry in walkdir::WalkDir::new(extra_directory)
-                .sort_by_file_name()
-                .into_iter()
-                .filter_map(Result::ok)
-                .filter(|e| e.file_type().is_file())
-            {
-                let path = entry.into_path();
+            for path in recursive_files_in(extra_directory, None) {
                 info!("Uploading extra screenshot {path:?}");
                 let event = screenshots::Event::UploadExtra(path);
                 if let Err(e) = screenshots_tx.send(event) {

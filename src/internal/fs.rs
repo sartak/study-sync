@@ -136,3 +136,23 @@ mod test {
         assert_eq!(t("..f.oo"), "..f.oo");
     }
 }
+
+pub fn recursive_files_in<P>(
+    directory: P,
+    min_depth: Option<usize>,
+) -> impl Iterator<Item = PathBuf>
+where
+    P: AsRef<std::path::Path>,
+{
+    let mut walker = walkdir::WalkDir::new(directory).sort_by_file_name();
+
+    if let Some(d) = min_depth {
+        walker = walker.min_depth(d);
+    }
+
+    walker
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .map(|e| e.into_path())
+}

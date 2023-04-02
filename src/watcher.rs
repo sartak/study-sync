@@ -71,13 +71,8 @@ impl WatcherPre {
 
 impl Watcher {
     pub fn check_directory(&self, directory: &Path) {
-        for entry in walkdir::WalkDir::new(directory)
-            .sort_by_file_name()
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().is_file())
-        {
-            self.maybe_emit(entry.into_path());
+        for path in fs::recursive_files_in(directory, None) {
+            self.maybe_emit(path);
         }
     }
 
