@@ -19,6 +19,7 @@ pub enum Event {
     UploadScreenshot(PathBuf, String),
     UploadExtra(PathBuf),
     IsOnline(bool),
+    ForceSync,
     StartShutdown,
 }
 
@@ -128,6 +129,7 @@ impl PriorityRetryChannel for Screenshots {
         match event {
             Event::StartShutdown => true,
             Event::IsOnline(_) => true,
+            Event::ForceSync => true,
 
             Event::UploadScreenshot(_, _) => false,
             Event::UploadExtra(_) => false,
@@ -143,6 +145,11 @@ impl PriorityRetryChannel for Screenshots {
             Event::IsOnline(online) => {
                 self.is_online = *online;
                 Action::Continue
+            }
+
+            Event::ForceSync => {
+                self.is_online = true;
+                Action::ResetTimeout
             }
 
             Event::UploadScreenshot(path, directory) => {

@@ -19,6 +19,7 @@ pub enum Event {
     UploadSave(PathBuf, PathBuf),
     UploadScreenshot(PathBuf, PathBuf),
     IsOnline(bool),
+    ForceSync,
     StartShutdown,
 }
 
@@ -134,6 +135,7 @@ impl PriorityRetryChannel for Saves {
         match event {
             Event::StartShutdown => true,
             Event::IsOnline(_) => true,
+            Event::ForceSync => true,
 
             Event::UploadSave(_, _) => false,
             Event::UploadScreenshot(_, _) => false,
@@ -149,6 +151,11 @@ impl PriorityRetryChannel for Saves {
             Event::IsOnline(online) => {
                 self.is_online = *online;
                 Action::Continue
+            }
+
+            Event::ForceSync => {
+                self.is_online = true;
+                Action::ResetTimeout
             }
 
             Event::UploadSave(path, directory) => {

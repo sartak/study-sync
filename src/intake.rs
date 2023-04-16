@@ -41,6 +41,7 @@ pub enum Event {
         end_time: u64,
     },
     IsOnline(bool),
+    ForceSync,
     StartShutdown,
 }
 
@@ -226,6 +227,7 @@ impl PriorityRetryChannel for Intake {
         match event {
             Event::StartShutdown => true,
             Event::IsOnline(_) => true,
+            Event::ForceSync => true,
 
             Event::PreviousGame { .. } => false,
             Event::SubmitStarted { .. } => false,
@@ -243,6 +245,11 @@ impl PriorityRetryChannel for Intake {
             Event::IsOnline(online) => {
                 self.is_online = *online;
                 Action::Continue
+            }
+
+            Event::ForceSync => {
+                self.is_online = true;
+                Action::ResetTimeout
             }
 
             Event::PreviousGame { play_id, intake_id } => {

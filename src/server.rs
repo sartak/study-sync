@@ -72,6 +72,7 @@ fn router(server: Server) -> Router {
         .route("/game", get(game_get))
         .route("/online", post(online_post))
         .route("/offline", post(offline_post))
+        .route("/sync", post(sync_post))
         .with_state(Arc::new(server))
 }
 
@@ -145,6 +146,17 @@ async fn offline_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
     }
 
     info!("POST /offline -> 204");
+    StatusCode::NO_CONTENT.into_response()
+}
+
+async fn sync_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
+    if let Err(e) = server.orchestrator_tx.send(orchestrator::Event::ForceSync) {
+        let e = anyhow!(e).context("failed to send event to orchestrator");
+        server.notify_error(&format!("POST /sync -> 500 ({e:?})"));
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    info!("POST /sync -> 204");
     StatusCode::NO_CONTENT.into_response()
 }
 

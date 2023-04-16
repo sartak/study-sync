@@ -65,6 +65,7 @@ pub enum Event {
         submitted_end: u64,
     },
     IsOnline(bool),
+    ForceSync,
     StartShutdown,
 }
 
@@ -613,6 +614,18 @@ impl Orchestrator {
                         self.notify_error(&format!("Could not send to screenshots: {e:?}"));
                     }
                     if let Err(e) = self.saves_tx.send(saves::Event::IsOnline(online)) {
+                        self.notify_error(&format!("Could not send to saves: {e:?}"));
+                    }
+                }
+
+                Event::ForceSync => {
+                    if let Err(e) = self.intake_tx.send(intake::Event::ForceSync) {
+                        self.notify_error(&format!("Could not send to intake: {e:?}"));
+                    }
+                    if let Err(e) = self.screenshots_tx.send(screenshots::Event::ForceSync) {
+                        self.notify_error(&format!("Could not send to screenshots: {e:?}"));
+                    }
+                    if let Err(e) = self.saves_tx.send(saves::Event::ForceSync) {
                         self.notify_error(&format!("Could not send to saves: {e:?}"));
                     }
                 }
