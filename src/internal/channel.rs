@@ -8,6 +8,7 @@ use tokio::time::Instant;
 
 pub enum Action {
     Continue,
+    ResetTimeout,
     Halt,
     Retry,
 }
@@ -36,6 +37,11 @@ pub trait PriorityRetryChannel {
                     Action::Continue => {
                         priority_retry = None;
                         priority_event = None;
+                    }
+                    Action::ResetTimeout => {
+                        priority_retry = None;
+                        priority_event = None;
+                        normal_retry = None;
                     }
                     Action::Halt => break,
                     Action::Retry => {
@@ -102,6 +108,11 @@ pub trait PriorityRetryChannel {
                     match self.handle(&event).await {
                         Action::Continue => priority_retry = None,
 
+                        Action::ResetTimeout => {
+                            priority_retry = None;
+                            normal_retry = None;
+                        }
+
                         Action::Halt => break,
 
                         Action::Retry => {
@@ -136,6 +147,8 @@ pub trait PriorityRetryChannel {
             } else if let Some(event) = buffer.pop_front() {
                 match self.handle(&event).await {
                     Action::Continue => normal_retry = None,
+
+                    Action::ResetTimeout => normal_retry = None,
 
                     Action::Halt => break,
 
