@@ -449,6 +449,9 @@ impl Orchestrator {
 
                 Event::SaveFileCreated(path) => {
                     let extension = match full_extension(&path) {
+                        Some("state.auto") => "state",
+                        Some("state1") => "state",
+                        Some("state2") => "state",
                         Some(e) => e,
                         None => {
                             self.notify_error(&format!(
