@@ -169,5 +169,5 @@ pub fn now_milli() -> String {
 
 pub fn now_ymd() -> String {
     let now: DateTime<Local> = Local::now();
-    now.format("%Y-%m-%d-%H-%M-%S").to_string()
+    now.format("%Y%m%d-%H%M%S").to_string()
 }
