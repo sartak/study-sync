@@ -10,7 +10,7 @@ use crate::{
 use anyhow::Result;
 use log::{error, info};
 use std::path::{Path, PathBuf};
-use tokio::fs::{create_dir_all, hard_link, remove_file, rename};
+use tokio::fs::{copy, create_dir_all, hard_link, remove_file, rename};
 use tokio::join;
 use tokio::sync::mpsc;
 
@@ -478,41 +478,42 @@ impl Orchestrator {
 
                     let latest_screenshot = &self.latest_screenshot;
 
-                    let (
-                        pending_save_res,
-                        keep_save_res,
-                        pending_screenshot_res,
-                        keep_screenshot_res,
-                    ) = join!(
-                        hard_link(&path, &pending_save_destination),
-                        hard_link(&path, &keep_save_destination),
-                        hard_link(&latest_screenshot, &pending_screenshot_destination),
-                        hard_link(&latest_screenshot, &keep_screenshot_destination),
+                    let (keep_save_res, keep_screenshot_res) = join!(
+                        copy(&path, &keep_save_destination),
+                        copy(&latest_screenshot, &keep_screenshot_destination),
                     );
-
-                    if let Err(e) = pending_save_res {
-                        self.notify_error(&format!(
-                            "Could not hardlink save {path:?} to {pending_save_destination:?}: {e:?}"
-                        ));
-                        continue;
-                    }
 
                     if let Err(e) = keep_save_res {
                         self.notify_error(&format!(
-                            "Could not hardlink save {path:?} to {keep_save_destination:?}: {e:?}"
+                            "Could not copy save {path:?} to {keep_save_destination:?}: {e:?}"
                         ));
                         continue;
                     }
 
                     if let Err(e) = keep_screenshot_res {
                         self.notify_error(&format!(
-                            "Could not hardlink screenshot {latest_screenshot:?} to {keep_screenshot_destination:?}: {e:?}"
+                            "Could not copy screenshot {latest_screenshot:?} to {keep_screenshot_destination:?}: {e:?}"
                         ));
+                    }
+
+                    let (pending_save_res, pending_screenshot_res) = join!(
+                        hard_link(&keep_save_destination, &pending_save_destination),
+                        hard_link(
+                            &keep_screenshot_destination,
+                            &pending_screenshot_destination
+                        ),
+                    );
+
+                    if let Err(e) = pending_save_res {
+                        self.notify_error(&format!(
+                            "Could not hardlink save {keep_save_destination:?} to {pending_save_destination:?}: {e:?}"
+                        ));
+                        continue;
                     }
 
                     if let Err(e) = &pending_screenshot_res {
                         self.notify_error(&format!(
-                            "Could not hardlink screenshot {latest_screenshot:?} to {pending_screenshot_destination:?}: {e:?}"
+                            "Could not hardlink screenshot {keep_screenshot_destination:?} to {pending_screenshot_destination:?}: {e:?}"
                         ));
                     }
 
