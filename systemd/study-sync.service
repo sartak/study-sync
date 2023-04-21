@@ -6,6 +6,8 @@ After=clean-lastfile.service
 ExecStart=/usr/local/bin/study-sync-wrapper.sh
 UMask=0000
 StandardError=append:/var/log/study-sync.log
+User=ark
+Group=ark
 
 [Install]
 WantedBy=multi-user.target
