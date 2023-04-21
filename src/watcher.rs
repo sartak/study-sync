@@ -3,6 +3,7 @@ use crate::{
     notify, orchestrator,
 };
 use anyhow::{anyhow, Result};
+use lazy_static::lazy_static;
 use log::info;
 use regex::Regex;
 use std::path::{Path, PathBuf};
@@ -127,12 +128,16 @@ impl Watcher {
 }
 
 impl WatchTarget {
-    fn file_pattern(&self) -> Regex {
+    fn file_pattern(&self) -> &Regex {
+        lazy_static! {
+            static ref IMG_RE: Regex = Regex::new(r"\.(?:png|jpg)$").unwrap();
+            static ref SAVE_RE: Regex =
+                Regex::new(r"\.(?:srm|state[0-9]*|state\.auto|sav|rtc|ldci)$").unwrap();
+        }
+
         match self {
-            WatchTarget::Screenshots => Regex::new(r"\.(?:png|jpg)$").unwrap(),
-            WatchTarget::SaveFiles => {
-                Regex::new(r"\.(?:srm|state[0-9]*|state\.auto|sav|rtc|ldci)$").unwrap()
-            }
+            WatchTarget::Screenshots => &IMG_RE,
+            WatchTarget::SaveFiles => &SAVE_RE,
         }
     }
 }
