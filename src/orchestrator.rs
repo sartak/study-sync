@@ -26,7 +26,7 @@ pub enum Language {
 pub struct Game {
     pub id: i64,
     pub path: PathBuf,
-    pub directory: String,
+    pub directory: Option<String>,
     pub language: Language,
     pub label: String,
 }
@@ -317,7 +317,14 @@ impl Orchestrator {
                         self.notify_error(&format!("Could not send to intake: {e:?}"));
                     }
 
-                    let screenshot_dir = self.screenshot_dir().unwrap();
+                    if let Some(screenshot_dir) = self.screenshot_dir() {
+                        if let Err(e) = create_dir_all(&screenshot_dir).await {
+                            self.notify_error(&format!(
+                                "Could not create {screenshot_dir:?}: {e:?}"
+                            ));
+                            continue;
+                        }
+                    }
 
                     let mut pending_save_dir = self.pending_saves.join(path);
                     pending_save_dir.set_extension("");
@@ -325,15 +332,10 @@ impl Orchestrator {
                     let mut keep_save_dir = self.keep_saves.join(path);
                     keep_save_dir.set_extension("");
 
-                    let (screenshot_dir_res, pending_save_dir_res, keep_save_dir_res) = join!(
-                        create_dir_all(&screenshot_dir),
+                    let (pending_save_dir_res, keep_save_dir_res) = join!(
                         create_dir_all(&pending_save_dir),
                         create_dir_all(&keep_save_dir)
                     );
-                    if let Err(e) = screenshot_dir_res {
-                        self.notify_error(&format!("Could not create {screenshot_dir:?}: {e:?}"));
-                        continue;
-                    }
                     if let Err(e) = pending_save_dir_res {
                         self.notify_error(&format!("Could not create {pending_save_dir:?}: {e:?}"));
                         continue;
@@ -382,7 +384,7 @@ impl Orchestrator {
                 }
 
                 Event::ScreenshotCreated(path) => {
-                    if let Some(play) = self.playing() {
+                    if let Some((play, directory)) = self.playing_with_directory() {
                         let mut destination = self.screenshot_dir().unwrap();
                         destination.push(now_milli());
                         destination.set_extension(
@@ -424,7 +426,7 @@ impl Orchestrator {
 
                         let event = screenshots::Event::UploadScreenshot(
                             destination,
-                            play.game.directory.clone(),
+                            directory.to_string(),
                         );
                         if let Err(e) = self.screenshots_tx.send(event) {
                             self.notify_error(&format!("Could not send to screenshots: {e:?}"));
@@ -672,10 +674,24 @@ impl Orchestrator {
         self.current_play.as_ref().or(self.previous_play.as_ref())
     }
 
+    fn playing_with_directory(&self) -> Option<(&Play, &str)> {
+        if let Some(playing) = self.playing() {
+            if let Some(ref directory) = playing.game.directory {
+                return Some((playing, directory));
+            }
+        }
+
+        None
+    }
+
     fn screenshot_dir(&self) -> Option<PathBuf> {
-        self.playing()
-            .as_ref()
-            .map(|p| self.pending_screenshots.join(&p.game.directory))
+        if let Some(playing) = self.playing() {
+            if let Some(ref directory) = playing.game.directory {
+                return Some(self.pending_screenshots.join(directory));
+            }
+        }
+
+        None
     }
 
     fn set_current_play(&mut self, play: Option<Play>) {
