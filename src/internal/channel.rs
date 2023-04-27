@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use log::info;
+use std::cmp::min;
 use std::collections::VecDeque;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -27,6 +28,7 @@ pub trait PriorityRetryChannel {
         let mut priority_event = None;
         let mut priority_retry = None;
         let mut normal_retry = None;
+        let start = Instant::now();
 
         let online_secs = 5;
         let offline_secs = 30;
@@ -64,6 +66,7 @@ pub trait PriorityRetryChannel {
                             } else {
                                 offline_secs
                             };
+                        let wait = min(start.elapsed().as_secs(), wait);
 
                         info!("Waiting for {wait}s before retrying");
                         tokio::time::sleep(Duration::from_secs(wait)).await;
@@ -135,6 +138,7 @@ pub trait PriorityRetryChannel {
                                 } else {
                                     offline_secs
                                 };
+                            let wait = min(start.elapsed().as_secs(), wait);
 
                             info!("Waiting for {wait}s before retrying");
                             tokio::time::sleep(Duration::from_secs(wait)).await;
@@ -169,8 +173,9 @@ pub trait PriorityRetryChannel {
                             1
                         };
 
-                        let online_secs = retries * online_secs;
-                        let offline_secs = retries * offline_secs;
+                        let max = start.elapsed().as_secs();
+                        let online_secs = min(max, retries * online_secs);
+                        let offline_secs = min(max, retries * offline_secs);
 
                         let (a, b) = if self.is_online() {
                             (online_secs, offline_secs)
