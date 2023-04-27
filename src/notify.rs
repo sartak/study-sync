@@ -1,4 +1,6 @@
+use crate::internal::channel::{Action, PriorityRetryChannel};
 use anyhow::Result;
+use async_trait::async_trait;
 use log::{error, info};
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
@@ -18,7 +20,6 @@ pub struct NotifyPre {
 }
 
 pub struct Notify {
-    rx: mpsc::UnboundedReceiver<Event>,
     led_path: PathBuf,
 }
 
@@ -29,11 +30,8 @@ pub fn prepare() -> (NotifyPre, mpsc::UnboundedSender<Event>) {
 
 impl NotifyPre {
     pub async fn start(self, led_path: PathBuf) -> Result<()> {
-        let notify = Notify {
-            rx: self.rx,
-            led_path,
-        };
-        notify.start().await
+        let notify = Notify { led_path };
+        notify.start(self.rx).await
     }
 }
 
@@ -91,18 +89,52 @@ async fn change_led(led_path: &Path, red: bool) -> Result<()> {
 }
 
 impl Notify {
-    pub async fn start(mut self) -> Result<()> {
-        while let Some(event) = self.rx.recv().await {
-            info!("Handling {event:?}");
-            match event {
-                Event::Success(quick, _) => blink_success(quick, &self.led_path).await,
-                Event::Error(_) => blink_error(&self.led_path).await,
-                Event::Emergency(_) => blink_emergency(&self.led_path).await,
-                Event::StartShutdown => break,
-            }
-        }
-
+    pub async fn start(mut self, rx: mpsc::UnboundedReceiver<Event>) -> Result<()> {
+        self.run(rx).await;
         info!("notify gracefully shut down");
         Ok(())
+    }
+}
+
+#[async_trait]
+impl PriorityRetryChannel for Notify {
+    type Event = Event;
+
+    // Doesn't really matter
+    fn is_online(&self) -> bool {
+        true
+    }
+
+    fn is_high_priority(&self, event: &Event) -> bool {
+        match event {
+            Event::StartShutdown => true,
+
+            Event::Success(_, _) => false,
+            Event::Error(_) => false,
+            Event::Emergency(_) => false,
+        }
+    }
+
+    async fn handle(&mut self, event: &Event) -> Action {
+        info!("Handling event {event:?}");
+
+        match event {
+            Event::StartShutdown => Action::Halt,
+
+            Event::Success(quick, _) => {
+                blink_success(*quick, &self.led_path).await;
+                Action::Continue
+            }
+
+            Event::Error(_) => {
+                blink_error(&self.led_path).await;
+                Action::Continue
+            }
+
+            Event::Emergency(_) => {
+                blink_emergency(&self.led_path).await;
+                Action::Continue
+            }
+        }
     }
 }
