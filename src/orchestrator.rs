@@ -539,6 +539,8 @@ impl Orchestrator {
                             continue;
                         }
                     }
+
+                    self.notify_success(true, &format!("Handled save {path:?}"));
                 }
 
                 Event::IntakeStarted {
