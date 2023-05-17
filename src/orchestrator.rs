@@ -349,6 +349,16 @@ impl Orchestrator {
                 }
 
                 Event::GameEnded(path) => {
+                    if let Err(e) = remove_file(&self.latest_screenshot).await {
+                        if e.kind() != std::io::ErrorKind::NotFound {
+                            self.notify_error(&format!(
+                                "Could not remove latest screenshot {:?}: {e:?}",
+                                self.latest_screenshot
+                            ));
+                            continue;
+                        }
+                    }
+
                     let path = match self.trim_game_path(&path) {
                         Some(p) => p,
                         None => continue,
