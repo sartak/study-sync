@@ -97,8 +97,9 @@ pub trait Uploader: Notifier + Send + Online {
 
         if !res.status().is_success() {
             return Err(anyhow!(
-                "Failed to upload {path:?} using {url:?}: got status code {}",
-                res.status()
+                "Failed to upload {path:?} using {url:?}: got status code {}, body {:?}",
+                res.status(),
+                res.text().await
             ));
         }
 
