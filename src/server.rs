@@ -3,12 +3,13 @@ use anyhow::{anyhow, Context, Result};
 use axum::{
     extract::Query,
     extract::State,
-    http::StatusCode,
-    response::IntoResponse,
+    http::{Request, StatusCode},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
-use log::info;
+use log::{info, warn};
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -74,6 +75,22 @@ fn router(server: Server) -> Router {
         .route("/offline", post(offline_post))
         .route("/sync", post(sync_post))
         .with_state(Arc::new(server))
+        .layer(middleware::from_fn(logger))
+}
+
+async fn logger<B>(request: Request<B>, next: Next<B>) -> Response {
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+
+    let response = next.run(request).await;
+
+    if response.status().is_success() {
+        info!("{} {uri} -> {}", method, response.status());
+    } else {
+        warn!("{} {uri} -> {}", method, response.status());
+    }
+
+    response
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,7 +107,7 @@ async fn game_get(
         Ok(f) => f,
         Err(e) => {
             let e = anyhow!(e).context("failed to canonicalize path");
-            server.notify_error(&format!("GET /game -> 500 ({e:?})"));
+            server.notify_error(&e.to_string());
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -99,10 +116,6 @@ async fn game_get(
         "start" => orchestrator::Event::GameStarted(file),
         "end" => orchestrator::Event::GameEnded(file),
         _ => {
-            info!(
-                "GET /game (file {:?}) -> 400 (invalid event: {})",
-                file, params.event
-            );
             return (
                 StatusCode::BAD_REQUEST,
                 format!("invalid event: {}", params.event),
@@ -113,11 +126,10 @@ async fn game_get(
 
     if let Err(e) = server.orchestrator_tx.send(event) {
         let e = anyhow!(e).context("failed to send event to orchestrator");
-        server.notify_error(&format!("GET /game -> 500 ({e:?})"));
+        server.notify_error(&e.to_string());
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    info!("GET /game -> 204");
     StatusCode::NO_CONTENT.into_response()
 }
 
@@ -127,11 +139,10 @@ async fn online_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
         .send(orchestrator::Event::IsOnline(true))
     {
         let e = anyhow!(e).context("failed to send event to orchestrator");
-        server.notify_error(&format!("POST /online -> 500 ({e:?})"));
+        server.notify_error(&e.to_string());
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    info!("POST /online -> 204");
     StatusCode::NO_CONTENT.into_response()
 }
 
@@ -141,22 +152,20 @@ async fn offline_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
         .send(orchestrator::Event::IsOnline(false))
     {
         let e = anyhow!(e).context("failed to send event to orchestrator");
-        server.notify_error(&format!("POST /offline -> 500 ({e:?})"));
+        server.notify_error(&e.to_string());
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    info!("POST /offline -> 204");
     StatusCode::NO_CONTENT.into_response()
 }
 
 async fn sync_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
     if let Err(e) = server.orchestrator_tx.send(orchestrator::Event::ForceSync) {
         let e = anyhow!(e).context("failed to send event to orchestrator");
-        server.notify_error(&format!("POST /sync -> 500 ({e:?})"));
+        server.notify_error(&e.to_string());
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
-    info!("POST /sync -> 204");
     StatusCode::NO_CONTENT.into_response()
 }
 
