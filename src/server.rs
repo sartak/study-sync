@@ -99,10 +99,7 @@ struct GameParams {
     file: PathBuf,
 }
 
-async fn game_get(
-    Query(params): Query<GameParams>,
-    State(server): State<Arc<Server>>,
-) -> impl IntoResponse {
+async fn game_get(Query(params): Query<GameParams>, State(server): State<Arc<Server>>) -> Response {
     let file = match canonicalize(params.file).await {
         Ok(f) => f,
         Err(e) => {
@@ -133,7 +130,7 @@ async fn game_get(
     StatusCode::NO_CONTENT.into_response()
 }
 
-async fn online_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
+async fn online_post(State(server): State<Arc<Server>>) -> Response {
     if let Err(e) = server
         .orchestrator_tx
         .send(orchestrator::Event::IsOnline(true))
@@ -146,7 +143,7 @@ async fn online_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
     StatusCode::NO_CONTENT.into_response()
 }
 
-async fn offline_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
+async fn offline_post(State(server): State<Arc<Server>>) -> Response {
     if let Err(e) = server
         .orchestrator_tx
         .send(orchestrator::Event::IsOnline(false))
@@ -159,7 +156,7 @@ async fn offline_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
     StatusCode::NO_CONTENT.into_response()
 }
 
-async fn sync_post(State(server): State<Arc<Server>>) -> impl IntoResponse {
+async fn sync_post(State(server): State<Arc<Server>>) -> Response {
     if let Err(e) = server.orchestrator_tx.send(orchestrator::Event::ForceSync) {
         let e = anyhow!(e).context("failed to send event to orchestrator");
         server.notify_error(&e.to_string());
