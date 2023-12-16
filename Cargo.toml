@@ -25,10 +25,10 @@ log = { version = "0.4.17", features = ["serde"] }
 notify = { version = "5.1.0", default-features = false, features = ["serde"] }
 regex = { version = "1.7.3", default-features = false, features = ["perf", "std"] }
 reqwest = { version = "0.11.15", default-features = false, features = ["json", "serde_json", "stream"] }
-rusqlite = "0.29.0"
+rusqlite = { version = "0.30.0", features = ["bundled"] }
 serde = "1.0.158"
 sha1 = "0.10.5"
 tokio = { version = "1.35.0", features = ["full"] }
-tokio-rusqlite = "0.4.0"
+tokio-rusqlite = "0.5.0"
 tokio-util = { version = "0.7.7", features = ["codec"] }
 walkdir = "2.3.3"

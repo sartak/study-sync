@@ -70,7 +70,7 @@ impl Database {
                 )?;
 
                 let path_param = path.clone();
-                stmt.query_row(params![&path_param.to_str()], |row| {
+                Ok(stmt.query_row(params![&path_param.to_str()], |row| {
                     Ok(Game {
                         id: row.get(0)?,
                         path,
@@ -78,9 +78,9 @@ impl Database {
                         language: row.get(2)?,
                         label: row.get(3)?,
                     })
-                })
+                }))
             })
-            .await?)
+            .await??)
     }
 
     pub async fn started_playing(&self, game: Game) -> Result<Play> {
@@ -176,7 +176,7 @@ impl Database {
                     skipped: row.get(7)?,
                 })).optional()?;
 
-                Ok::<_, rusqlite::Error>(current)
+                Ok::<_, tokio_rusqlite::Error>(current)
             })
             .await?;
         let current = match current {
@@ -223,7 +223,7 @@ impl Database {
             })?
             .collect::<Result<Vec<_>, rusqlite::Error>>()?;
 
-            Ok::<_, rusqlite::Error>(plays)
+            Ok::<_, tokio_rusqlite::Error>(plays)
         }).await?;
 
         if plays.is_empty() {
