@@ -48,27 +48,29 @@ where
 }
 
 async fn save_currently_playing(dbh: Connection, id: Option<i64>) -> Result<()> {
-    dbh.call(move |conn| {
-        conn.execute("DELETE FROM current", [])?;
-        if let Some(id) = id {
-            conn.execute("INSERT INTO current (play) VALUES (?)", params![id])?;
-        }
-        Ok(())
-    })
-    .await
+    Ok(dbh
+        .call(move |conn| {
+            conn.execute("DELETE FROM current", [])?;
+            if let Some(id) = id {
+                conn.execute("INSERT INTO current (play) VALUES (?)", params![id])?;
+            }
+            Ok(())
+        })
+        .await?)
 }
 
 impl Database {
     pub async fn game_for_path(&self, path: &Path) -> Result<Game> {
         let path = PathBuf::from(path);
-        self.games_dbh
+        Ok(self
+            .games_dbh
             .call(|conn| {
                 let mut stmt = conn.prepare_cached(
                     "SELECT rowid, directory, language, label FROM games WHERE path = ?",
                 )?;
 
                 let path_param = path.clone();
-                Ok(stmt.query_row(params![&path_param.to_str()], |row| {
+                stmt.query_row(params![&path_param.to_str()], |row| {
                     Ok(Game {
                         id: row.get(0)?,
                         path,
@@ -76,9 +78,9 @@ impl Database {
                         language: row.get(2)?,
                         label: row.get(3)?,
                     })
-                })?)
+                })
             })
-            .await
+            .await?)
     }
 
     pub async fn started_playing(&self, game: Game) -> Result<Play> {
@@ -87,7 +89,8 @@ impl Database {
             .unwrap()
             .as_secs();
 
-        self.plays_dbh
+        Ok(self
+            .plays_dbh
             .call(move |conn| {
                 conn.execute(
                     "INSERT INTO plays (game, start_time) VALUES (?, ?)",
@@ -105,7 +108,7 @@ impl Database {
                     skipped: false,
                 })
             })
-            .await
+            .await?)
     }
 
     pub async fn finished_playing(&self, play: Play) -> Result<Play> {
@@ -114,7 +117,8 @@ impl Database {
             .unwrap()
             .as_secs();
 
-        self.plays_dbh
+        Ok(self
+            .plays_dbh
             .call(move |conn| {
                 conn.execute(
                     "UPDATE plays SET end_time=? WHERE rowid=?",
@@ -125,7 +129,7 @@ impl Database {
                     ..play
                 })
             })
-            .await
+            .await?)
     }
 
     pub fn detach_save_currently_playing(&self, id: Option<i64>) {
@@ -317,7 +321,8 @@ impl Database {
         submitted_start: u64,
     ) -> Result<()> {
         let intake_id = intake_id.to_string();
-        self.plays_dbh
+        Ok(self
+            .plays_dbh
             .call(move |conn| {
                 conn.execute(
                     "UPDATE plays SET intake_id=?, submitted_start=? WHERE rowid=?",
@@ -325,11 +330,12 @@ impl Database {
                 )?;
                 Ok(())
             })
-            .await
+            .await?)
     }
 
     pub async fn final_intake(&self, play_id: i64, submitted_end: u64) -> Result<()> {
-        self.plays_dbh
+        Ok(self
+            .plays_dbh
             .call(move |conn| {
                 conn.execute(
                     "UPDATE plays SET submitted_end=? WHERE rowid=?",
@@ -337,7 +343,7 @@ impl Database {
                 )?;
                 Ok(())
             })
-            .await
+            .await?)
     }
 
     pub async fn full_intake(
@@ -348,7 +354,7 @@ impl Database {
         submitted_end: u64,
     ) -> Result<()> {
         let intake_id = intake_id.to_string();
-        self.plays_dbh
+        Ok(self.plays_dbh
             .call(move |conn| {
                 conn.execute(
                     "UPDATE plays SET intake_id=?, submitted_start=?, submitted_end=? WHERE rowid=?",
@@ -356,7 +362,7 @@ impl Database {
                 )?;
                 Ok(())
             })
-            .await
+            .await?)
     }
 }
 
