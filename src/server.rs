@@ -1,9 +1,8 @@
 use crate::{internal::notifier::Notifier, notify, orchestrator};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use axum::{
-    extract::Query,
-    extract::State,
-    http::{Request, StatusCode},
+    extract::{Query, Request, State},
+    http::StatusCode,
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -46,10 +45,10 @@ impl ServerPre {
             notify_tx,
         };
 
-        let listener = axum::Server::try_bind(address)
-            .with_context(|| format!("Failed to bind to {address}"))?
-            .serve(router(server).into_make_service())
+        let listener = tokio::net::TcpListener::bind(address).await?;
+        let listener = axum::serve(listener, router(server).into_make_service())
             .with_graceful_shutdown(handle_events(self.rx));
+
         info!("Listening on {address}");
         listener.await?;
         Ok(())
@@ -78,7 +77,7 @@ fn router(server: Server) -> Router {
         .layer(middleware::from_fn(logger))
 }
 
-async fn logger<B>(request: Request<B>, next: Next<B>) -> Response {
+async fn logger(request: Request, next: Next) -> Response {
     let method = request.method().clone();
     let uri = request.uri().clone();
 
