@@ -10,8 +10,7 @@ use axum::{
 };
 use log::{info, warn};
 use serde::Deserialize;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc, time::Instant};
 use tokio::{fs::canonicalize, sync::mpsc};
 
 #[derive(Debug)]
@@ -78,15 +77,28 @@ fn router(server: Server) -> Router {
 }
 
 async fn logger(request: Request, next: Next) -> Response {
+    let start = Instant::now();
     let method = request.method().clone();
     let uri = request.uri().clone();
 
     let response = next.run(request).await;
 
+    let duration = (start.elapsed().as_micros() as f64) / 1000.0;
+
     if response.status().is_success() {
-        info!("{} {uri} -> {}", method, response.status());
+        info!(
+            "{} {uri} -> {} ({:.1}ms)",
+            method,
+            response.status(),
+            duration
+        );
     } else {
-        warn!("{} {uri} -> {}", method, response.status());
+        warn!(
+            "{} {uri} -> {} ({:.1}ms)",
+            method,
+            response.status(),
+            duration
+        );
     }
 
     response
