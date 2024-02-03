@@ -9,6 +9,17 @@ panic = "abort"
 lto = "fat"
 codegen-units = 1
 
+[profile.dev]
+lto = "off"
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = 0
+
+[profile.dev.package.study-sync]
+opt-level = 0
+debug = 0
+
 [dependencies]
 anyhow = "1.0.75"
 async-trait = "0.1.74"
