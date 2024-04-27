@@ -1,9 +1,10 @@
 use anyhow::{anyhow, Result};
 use clap::Parser;
-use log::{error, info};
 use std::{iter, path::Path, path::PathBuf, process};
 use study_sync::*;
 use tokio::{select, signal, sync::mpsc, try_join};
+use tracing::{error, info};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -48,17 +49,16 @@ struct Args {
 
     #[arg(long)]
     led_path: PathBuf,
-
-    #[clap(flatten)]
-    verbose: clap_verbosity_flag::Verbosity,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
-    env_logger::Builder::new()
-        .filter_level(args.verbose.log_level_filter())
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::from_default_env())
         .init();
+
+    let args = Args::parse();
 
     if !args.led_path.is_file() {
         return Err(anyhow!("led-path {:?} not a file", args.led_path));

@@ -8,11 +8,11 @@ use crate::{
     notify, saves, screenshots, server, watcher,
 };
 use anyhow::Result;
-use log::{error, info};
 use std::path::{Path, PathBuf};
 use tokio::fs::{copy, create_dir_all, hard_link, remove_file, rename};
 use tokio::join;
 use tokio::sync::mpsc;
+use tracing::{error, info};
 
 #[derive(Debug, Clone)]
 pub enum Language {
@@ -734,10 +734,6 @@ impl Orchestrator {
 }
 
 impl Notifier for Orchestrator {
-    fn notify_target(&self) -> &str {
-        "study_sync::orchestrator"
-    }
-
     fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
         &self.notify_tx
     }

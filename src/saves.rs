@@ -9,10 +9,10 @@ use crate::{
 };
 use anyhow::Result;
 use async_trait::async_trait;
-use log::{error, info};
 use std::path::{Path, PathBuf};
 use tokio::fs::remove_file;
 use tokio::sync::mpsc;
+use tracing::{error, info};
 
 #[derive(Debug)]
 pub enum Event {
@@ -94,10 +94,6 @@ impl Saves {
 }
 
 impl Notifier for Saves {
-    fn notify_target(&self) -> &str {
-        "study_sync::saves"
-    }
-
     fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
         &self.notify_tx
     }

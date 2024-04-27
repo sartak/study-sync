@@ -10,11 +10,11 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
+use tracing::{error, info, warn};
 
 #[derive(Debug)]
 pub enum Event {
@@ -196,10 +196,6 @@ impl Language {
 }
 
 impl Notifier for Intake {
-    fn notify_target(&self) -> &str {
-        "study_sync::intake"
-    }
-
     fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
         &self.notify_tx
     }

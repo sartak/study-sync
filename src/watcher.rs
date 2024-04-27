@@ -4,10 +4,10 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use lazy_static::lazy_static;
-use log::info;
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use tokio::{select, sync::mpsc};
+use tracing::info;
 
 #[derive(Debug)]
 pub enum Event {
@@ -143,10 +143,6 @@ impl WatchTarget {
 }
 
 impl Notifier for Watcher {
-    fn notify_target(&self) -> &str {
-        "study_sync::watcher"
-    }
-
     fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
         &self.notify_tx
     }

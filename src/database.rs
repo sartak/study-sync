@@ -7,13 +7,13 @@ use crate::{
 use anyhow::Result;
 use futures::future::try_join_all;
 use itertools::Itertools;
-use log::{error, info};
 use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::{join, sync::mpsc};
 use tokio_rusqlite::Connection;
+use tracing::{error, info};
 
 pub struct Database {
     plays_dbh: Connection,
@@ -378,10 +378,6 @@ impl rusqlite::types::FromSql for Language {
 }
 
 impl Notifier for Database {
-    fn notify_target(&self) -> &str {
-        "study_sync::database"
-    }
-
     fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
         &self.notify_tx
     }

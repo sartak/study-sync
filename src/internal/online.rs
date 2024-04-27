@@ -1,6 +1,6 @@
 use crate::{internal::notifier::Notifier, orchestrator};
-use log::info;
 use tokio::sync::mpsc;
+use tracing::info;
 
 pub trait Online: Notifier {
     fn orchestrator_tx(&self) -> &mpsc::UnboundedSender<orchestrator::Event>;

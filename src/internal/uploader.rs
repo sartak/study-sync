@@ -1,13 +1,13 @@
 use crate::internal::{notifier::Notifier, online::Online};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use log::info;
 use reqwest::Body;
 use sha1::{Digest, Sha1};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs::File;
 use tokio_util::codec::{BytesCodec, FramedRead};
+use tracing::info;
 
 #[async_trait]
 pub trait Uploader: Notifier + Send + Online {

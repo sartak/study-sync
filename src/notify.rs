@@ -1,11 +1,11 @@
 use crate::internal::channel::{Action, PriorityRetryChannel};
 use anyhow::Result;
 use async_trait::async_trait;
-use log::{error, info};
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
+use tracing::{error, info};
 
 #[derive(Debug)]
 pub enum Event {

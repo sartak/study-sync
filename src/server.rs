@@ -8,10 +8,10 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use log::{info, warn};
 use serde::Deserialize;
 use std::{path::PathBuf, sync::Arc, time::Instant};
 use tokio::{fs::canonicalize, sync::mpsc};
+use tracing::{info, warn};
 
 #[derive(Debug)]
 pub enum Event {
@@ -178,10 +178,6 @@ async fn sync_post(State(server): State<Arc<Server>>) -> Response {
 }
 
 impl Notifier for Server {
-    fn notify_target(&self) -> &str {
-        "study_sync::server"
-    }
-
     fn notify_tx(&self) -> &mpsc::UnboundedSender<notify::Event> {
         &self.notify_tx
     }

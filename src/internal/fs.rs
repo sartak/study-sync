@@ -4,7 +4,6 @@ use futures::{
     channel::mpsc::{channel, Receiver},
     SinkExt, StreamExt,
 };
-use log::{debug, info};
 use notify::{
     event::{AccessKind, AccessMode},
     Config, Event as NotifyEvent, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
@@ -12,6 +11,7 @@ use notify::{
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
+use tracing::{debug, info};
 
 pub async fn start_watcher<P>(paths: &[P], tx: mpsc::UnboundedSender<PathBuf>) -> Result<()>
 where

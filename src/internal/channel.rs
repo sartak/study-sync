@@ -1,11 +1,11 @@
 use async_trait::async_trait;
-use log::info;
 use std::cmp::min;
 use std::collections::VecDeque;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::timeout_at;
 use tokio::time::Instant;
+use tracing::info;
 
 pub enum Action {
     Continue,
