@@ -3,15 +3,15 @@ use anyhow::{anyhow, Result};
 use axum::{
     extract::{Query, Request, State},
     http::StatusCode,
-    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
 use serde::Deserialize;
-use std::{path::PathBuf, sync::Arc, time::Instant};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{fs::canonicalize, sync::mpsc};
-use tracing::{info, warn};
+use tower_http::trace::TraceLayer;
+use tracing::{info, info_span, warn, Span};
 
 #[derive(Debug)]
 pub enum Event {
@@ -73,35 +73,28 @@ fn router(server: Server) -> Router {
         .route("/offline", post(offline_post))
         .route("/sync", post(sync_post))
         .with_state(Arc::new(server))
-        .layer(middleware::from_fn(logger))
-}
-
-async fn logger(request: Request, next: Next) -> Response {
-    let start = Instant::now();
-    let method = request.method().clone();
-    let uri = request.uri().clone();
-
-    let response = next.run(request).await;
-
-    let duration = (start.elapsed().as_micros() as f64) / 1000.0;
-
-    if response.status().is_success() {
-        info!(
-            "{} {uri} -> {} ({:.1}ms)",
-            method,
-            response.status(),
-            duration
-        );
-    } else {
-        warn!(
-            "{} {uri} -> {} ({:.1}ms)",
-            method,
-            response.status(),
-            duration
-        );
-    }
-
-    response
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &Request<_>| {
+                    info_span!(
+                        "http_request",
+                        method = ?request.method(),
+                        path = ?request.uri(),
+                        duration_ms = tracing::field::Empty,
+                        status = tracing::field::Empty,
+                    )
+                })
+                .on_response(|response: &Response, duration: Duration, span: &Span| {
+                    let duration = (duration.as_micros() as f64) / 1000.0;
+                    span.record("duration_ms", duration);
+                    span.record("status", response.status().as_u16());
+                    if response.status().is_success() {
+                        info!("{}", response.status());
+                    } else {
+                        warn!("{}", response.status());
+                    }
+                }),
+        )
 }
 
 #[derive(Debug, Deserialize)]
