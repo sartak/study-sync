@@ -1247,7 +1247,6 @@ dependencies = [
  "futures",
  "hex",
  "itertools",
- "lazy_static",
  "notify",
  "regex",
  "reqwest",

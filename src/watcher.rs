@@ -3,9 +3,11 @@ use crate::{
     notify, orchestrator,
 };
 use anyhow::{anyhow, Result};
-use lazy_static::lazy_static;
 use regex::Regex;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 use tokio::{select, sync::mpsc};
 use tracing::info;
 
@@ -129,15 +131,16 @@ impl Watcher {
 
 impl WatchTarget {
     fn file_pattern(&self) -> &Regex {
-        lazy_static! {
-            static ref IMG_RE: Regex = Regex::new(r"\.(?:png|jpg)$").unwrap();
-            static ref SAVE_RE: Regex =
-                Regex::new(r"\.(?:srm|state[0-9]*|state\.auto|sav|rtc|ldci)$").unwrap();
-        }
+        static IMG_RE: OnceLock<Regex> = OnceLock::new();
+        static SAVE_RE: OnceLock<Regex> = OnceLock::new();
 
         match self {
-            WatchTarget::Screenshots => &IMG_RE,
-            WatchTarget::SaveFiles => &SAVE_RE,
+            WatchTarget::Screenshots => {
+                IMG_RE.get_or_init(|| Regex::new(r"\.(?:png|jpg)$").unwrap())
+            }
+            WatchTarget::SaveFiles => SAVE_RE.get_or_init(|| {
+                Regex::new(r"\.(?:srm|state[0-9]*|state\.auto|sav|rtc|ldci)$").unwrap()
+            }),
         }
     }
 }
