@@ -21,7 +21,7 @@ opt-level = 3
 opt-level = 0
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = "1.0.86"
 async-trait = "0.1.74"
 axum = "0.7.5"
 chrono = "0.4.31"
