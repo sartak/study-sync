@@ -42,4 +42,4 @@ tokio-util = { version = "0.7.11", features = ["codec"] }
 tower-http = { version = "0.5.2", features = ["trace"] }
 tracing = { version = "0.1.40", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-walkdir = "2.4.0"
+walkdir = "2.5.0"
