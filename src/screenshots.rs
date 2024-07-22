@@ -8,7 +8,6 @@ use crate::{
     notify, orchestrator,
 };
 use anyhow::Result;
-use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use tokio::fs::remove_file;
 use tokio::sync::mpsc;
@@ -113,7 +112,6 @@ impl Online for Screenshots {
     }
 }
 
-#[async_trait]
 impl PriorityRetryChannel for Screenshots {
     type Event = Event;
 

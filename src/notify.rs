@@ -1,6 +1,5 @@
 use crate::internal::channel::{Action, PriorityRetryChannel};
 use anyhow::Result;
-use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
@@ -96,7 +95,6 @@ impl Notify {
     }
 }
 
-#[async_trait]
 impl PriorityRetryChannel for Notify {
     type Event = Event;
 

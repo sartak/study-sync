@@ -9,7 +9,6 @@ use crate::{
     orchestrator::{self, Language},
 };
 use anyhow::{anyhow, Result};
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -211,7 +210,6 @@ impl Online for Intake {
     }
 }
 
-#[async_trait]
 impl PriorityRetryChannel for Intake {
     type Event = Event;
 
