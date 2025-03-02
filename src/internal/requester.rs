@@ -1,6 +1,6 @@
 use crate::internal::{notifier::Notifier, online::Online};
-use anyhow::{anyhow, Result};
-use serde::{de::DeserializeOwned, Serialize};
+use anyhow::{Result, anyhow};
+use serde::{Serialize, de::DeserializeOwned};
 use std::{future::Future, time::Duration};
 
 pub trait Requester: Notifier + Online {

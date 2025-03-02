@@ -1,17 +1,17 @@
 use crate::{internal::notifier::Notifier, notify, orchestrator};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use axum::{
+    Router,
     extract::{Query, Request, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
 };
 use serde::Deserialize;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{fs::canonicalize, sync::mpsc};
 use tower_http::trace::TraceLayer;
-use tracing::{info, info_span, warn, Span};
+use tracing::{Span, info, info_span, warn};
 
 #[derive(Debug)]
 pub enum Event {

@@ -1,5 +1,5 @@
 use crate::internal::{notifier::Notifier, online::Online};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use reqwest::Body;
 use sha1::{Digest, Sha1};
 use std::{

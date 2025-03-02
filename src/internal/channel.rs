@@ -1,7 +1,7 @@
 use std::{cmp::min, collections::VecDeque, future::Future, time::Duration};
 use tokio::{
     sync::mpsc,
-    time::{timeout_at, Instant},
+    time::{Instant, timeout_at},
 };
 use tracing::info;
 
@@ -54,11 +54,7 @@ pub trait PriorityRetryChannel {
                             let retries = if let Some(r) = priority_retry {
                                 let r = r + 1;
                                 priority_retry = Some(r);
-                                if r > 5 {
-                                    5
-                                } else {
-                                    r
-                                }
+                                if r > 5 { 5 } else { r }
                             } else {
                                 priority_retry = Some(1);
                                 1
@@ -126,11 +122,7 @@ pub trait PriorityRetryChannel {
                                 let retries = if let Some(r) = priority_retry {
                                     let r = r + 1;
                                     priority_retry = Some(r);
-                                    if r > 5 {
-                                        5
-                                    } else {
-                                        r
-                                    }
+                                    if r > 5 { 5 } else { r }
                                 } else {
                                     priority_retry = Some(1);
                                     1
@@ -167,11 +159,7 @@ pub trait PriorityRetryChannel {
                             let retries = if let Some(r) = normal_retry {
                                 let r = r + 1;
                                 normal_retry = Some(r);
-                                if r > 5 {
-                                    5
-                                } else {
-                                    r
-                                }
+                                if r > 5 { 5 } else { r }
                             } else {
                                 normal_retry = Some(1);
                                 1

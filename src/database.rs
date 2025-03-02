@@ -7,7 +7,7 @@ use crate::{
 use anyhow::Result;
 use futures::future::try_join_all;
 use itertools::Itertools;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
