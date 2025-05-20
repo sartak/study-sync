@@ -21,23 +21,23 @@ opt-level = 3
 opt-level = 0
 
 [dependencies]
-anyhow = "1.0.86"
-axum = "0.8.1"
-chrono = "0.4.38"
-clap = { version = "4.5.9", features = ["derive"] }
-futures = "0.3.30"
+anyhow = "1.0.98"
+axum = "0.8.4"
+chrono = "0.4.41"
+clap = { version = "4.5.38", features = ["derive"] }
+futures = "0.3.31"
 hex = "0.4.3"
-itertools = "0.13.0"
-notify = { version = "6.1.1", default-features = false, features = ["serde"] }
-regex = { version = "1.10.5", default-features = false, features = ["perf", "std"] }
-reqwest = { version = "0.12.5", default-features = false, features = ["json", "stream"] }
-rusqlite = { version = "0.31.0", features = ["bundled"] }
-serde = "1.0.204"
+itertools = "0.14.0"
+notify = { version = "8.0.0", default-features = false, features = ["serde"] }
+regex = { version = "1.11.1", default-features = false, features = ["perf", "std"] }
+reqwest = { version = "0.12.15", default-features = false, features = ["json", "stream"] }
+rusqlite = { version = "0.32.0", features = ["bundled"] }
+serde = "1.0.219"
 sha1 = "0.10.6"
-tokio-rusqlite = "0.5.1"
-tokio-util = { version = "0.7.11", features = ["codec"] }
-tokio = { version = "1.38.1", features = ["full"] }
-tower-http = { version = "0.5.2", features = ["trace"] }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-tracing = { version = "0.1.40", features = ["release_max_level_info"] }
+tokio-rusqlite = "0.6.0"
+tokio-util = { version = "0.7.15", features = ["codec"] }
+tokio = { version = "1.45.0", features = ["full"] }
+tower-http = { version = "0.6.4", features = ["trace"] }
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing = { version = "0.1.41", features = ["release_max_level_info"] }
 walkdir = "2.5.0"
