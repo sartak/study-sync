@@ -183,12 +183,12 @@ impl Intake {
 impl Language {
     fn intake_str(&self) -> &str {
         match self {
-            Language::English => "English",
-            Language::Japanese => "日本語",
-            Language::Cantonese => "廣東話",
+            Language::English => "en",
+            Language::Japanese => "ja",
+            Language::Cantonese => "can",
             Language::Other(lang) => {
-                warn!("Mapping intake language {lang} to English");
-                "English"
+                warn!("Mapping intake language {lang} to en (English)");
+                "en"
             }
         }
     }
