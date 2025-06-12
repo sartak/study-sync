@@ -53,7 +53,7 @@ struct IntakeResponse {
 
 #[derive(Debug, Deserialize)]
 struct IntakeResponseObject {
-    rowid: String,
+    id: String,
 }
 
 pub struct IntakePre {
@@ -124,21 +124,21 @@ impl Intake {
             language: language.intake_str(),
         };
 
-        let (submitted, IntakeResponseObject { rowid }) =
+        let (submitted, IntakeResponseObject { id }) =
             self.submit(reqwest::Method::POST, request).await?;
-        Ok((rowid, submitted))
+        Ok((id, submitted))
     }
 
     async fn finish_intake(&self, intake_id: &str, end_time: u64) -> Result<u64> {
         #[derive(Debug, Serialize)]
         struct Request<'a> {
-            rowid: &'a str,
+            id: &'a str,
             #[serde(rename = "endTime")]
             end_time: u64,
         }
 
         let request = Request {
-            rowid: intake_id,
+            id: intake_id,
             end_time,
         };
 
